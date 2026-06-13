@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Background circle -->
+  <circle cx="32" cy="32" r="32" fill="#1e1e1e"/>
+
+  <!-- Page body -->
+  <path d="M14 13A3 3 0 0117 10H40L51 21V51A3 3 0 0148 54H17A3 3 0 0114 51V13z"
+        fill="rgba(79,195,247,0.13)" stroke="#4fc3f7" stroke-width="2"/>
+
+  <!-- Fold corner -->
+  <path d="M40 10V21H51" stroke="#4fc3f7" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M40 10L51 21H41A1 1 0 0140 20V10z" fill="rgba(79,195,247,0.25)"/>
+
+  <!-- Text line 1 -->
+  <line x1="20" y1="28" x2="44" y2="28"
+        stroke="#4fc3f7" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Text line 2 -->
+  <line x1="20" y1="35" x2="44" y2="35"
+        stroke="#4fc3f7" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Text line 3 (short) -->
+  <line x1="20" y1="42" x2="33" y2="42"
+        stroke="#4fc3f7" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Pen (rotated -45°, bottom right area) -->
+  <g transform="translate(36,40) rotate(-45)">
+    <rect x="-3" y="-10" width="6" height="13" rx="1.5" fill="#4fc3f7"/>
+    <polygon points="-3,3 3,3 0,8" fill="#e0f7fa"/>
+    <circle cx="0" cy="9.5" r="1.2" fill="#4fc3f7" opacity="0.6"/>
+  </g>
+</svg>
