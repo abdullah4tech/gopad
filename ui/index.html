@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GoPad</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#1e1e1e;
+  --bg-side:#252526;
+  --bg-bar:#2d2d2d;
+  --bg-hover:#2a2d2e;
+  --bg-active:#094771;
+  --bg-input:#3c3c3c;
+  --border:#3e3e42;
+  --text:#cccccc;
+  --text-dim:#858585;
+  --text-bright:#ffffff;
+  --accent:#4fc3f7;
+  --danger:#f44747;
+  --ln-color:#495057;
+  --scroll:#424242;
+  --status-bg:#007acc;
+  --status-txt:#fff;
+  --font-mono:'JetBrains Mono','Cascadia Code','Fira Code',ui-monospace,monospace;
+  --font-ui:system-ui,-apple-system,sans-serif;
+  --fs:14px;
+  --lh:1.65;
+  --sidebar:240px;
+}
+[data-theme=light]{
+  --bg:#ffffff;
+  --bg-side:#f3f3f3;
+  --bg-bar:#ececec;
+  --bg-hover:#e8e8e8;
+  --bg-active:#d6ebff;
+  --bg-input:#fff;
+  --border:#ddd;
+  --text:#333;
+  --text-dim:#888;
+  --text-bright:#000;
+  --accent:#0066cc;
+  --danger:#cc0000;
+  --ln-color:#aaa;
+  --scroll:#ccc;
+  --status-bg:#0066cc;
+}
+
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:13px;user-select:none}
+
+::-webkit-scrollbar{width:7px;height:7px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:4px}
+
+/* ── Layout ── */
+#app{display:flex;flex-direction:column;height:100vh}
+
+/* ── Title bar ── */
+#titlebar{
+  background:var(--bg-bar);
+  border-bottom:1px solid var(--border);
+  height:36px;
+  display:flex;
+  align-items:center;
+  padding:0 14px;
+  gap:10px;
+  flex-shrink:0;
+}
+.logo{display:flex;align-items:center;gap:9px;text-decoration:none;user-select:none}
+.logo-mark{flex-shrink:0;display:flex;align-items:center}
+.logo-mark svg{width:26px;height:26px}
+.logo-text{display:flex;flex-direction:column;line-height:1}
+.logo-name{font-weight:800;font-size:13px;letter-spacing:2.5px;color:var(--text-bright);font-family:var(--font-ui)}
+.logo-sub{font-size:9.5px;font-weight:400;letter-spacing:.3px;color:var(--text-dim);margin-top:1px}
+
+/* ── Main split ── */
+#main{display:flex;flex:1;overflow:hidden}
+
+/* ── Sidebar ── */
+#sidebar{
+  width:var(--sidebar);
+  background:var(--bg-side);
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  flex-shrink:0;
+}
+#sb-head{
+  padding:10px 10px 8px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom:1px solid var(--border);
+}
+.sb-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim)}
+
+.icon-btn{
+  background:none;border:none;color:var(--text-dim);cursor:pointer;
+  padding:3px;border-radius:4px;display:flex;align-items:center;justify-content:center;
+  transition:background .12s,color .12s;
+}
+.icon-btn:hover{background:var(--bg-hover);color:var(--text)}
+.icon-btn svg{width:15px;height:15px}
+
+#sb-search{padding:7px 8px}
+#sb-search input{
+  width:100%;background:var(--bg-input);border:1px solid var(--border);
+  border-radius:4px;padding:5px 8px;color:var(--text);font-size:12px;
+  outline:none;transition:border-color .15s;user-select:text;
+}
+#sb-search input:focus{border-color:var(--accent)}
+#sb-search input::placeholder{color:var(--text-dim)}
+
+#notes-list{flex:1;overflow-y:auto;padding:3px 0}
+
+.ni{
+  padding:7px 10px;cursor:pointer;border-left:2px solid transparent;
+  display:flex;align-items:center;gap:7px;transition:background .1s;
+}
+.ni:hover{background:var(--bg-hover)}
+.ni.active{background:var(--bg-active);border-left-color:var(--accent)}
+.ni-info{flex:1;min-width:0}
+.ni-title{font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ni-date{font-size:10px;color:var(--text-dim);margin-top:1px}
+.ni-del{
+  opacity:0;background:none;border:none;color:var(--text-dim);cursor:pointer;
+  padding:2px;border-radius:3px;transition:opacity .15s,color .15s;flex-shrink:0;
+}
+.ni:hover .ni-del{opacity:1}
+.ni-del:hover{color:var(--danger)}
+.ni-del svg{width:13px;height:13px;display:block}
+
+/* ── Editor area ── */
+#editor-area{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+
+/* ── Toolbar ── */
+#toolbar{
+  background:var(--bg-bar);border-bottom:1px solid var(--border);
+  padding:5px 10px;display:flex;align-items:center;gap:4px;flex-shrink:0;flex-wrap:nowrap;
+}
+#note-title{
+  background:none;border:none;color:var(--text-bright);font-size:13px;font-weight:600;
+  padding:4px 6px;border-radius:4px;flex:1;min-width:0;outline:none;
+  border-bottom:1px solid transparent;transition:border-color .15s,background .15s;user-select:text;
+}
+#note-title:focus{border-bottom-color:var(--accent);background:rgba(255,255,255,.04)}
+#note-title::placeholder{color:var(--text-dim)}
+.tb-sep{width:1px;height:18px;background:var(--border);margin:0 2px;flex-shrink:0}
+.tb-btn{
+  background:none;border:none;color:var(--text-dim);cursor:pointer;
+  padding:4px 7px;border-radius:4px;font-size:11px;white-space:nowrap;
+  display:flex;align-items:center;gap:3px;transition:background .12s,color .12s;flex-shrink:0;
+}
+.tb-btn:hover{background:var(--bg-hover);color:var(--text)}
+.tb-btn svg{width:13px;height:13px}
+.tb-btn.danger{color:var(--danger)}
+.tb-btn.danger:hover{background:rgba(244,71,71,.12)}
+.tb-btn.active{color:var(--accent)}
+
+/* ── Editor wrapper ── */
+#editor-wrap{flex:1;display:flex;overflow:hidden;position:relative}
+
+/* Empty state */
+#empty-state{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;color:var(--text-dim);
+}
+#empty-state svg{width:52px;height:52px;opacity:.25}
+#empty-state p{font-size:14px}
+.btn-new-empty{
+  background:var(--accent);color:#fff;border:none;border-radius:6px;
+  padding:8px 18px;font-size:13px;cursor:pointer;transition:opacity .15s;
+}
+.btn-new-empty:hover{opacity:.85}
+
+/* Editor pane */
+#editor-pane{flex:1;display:none;overflow:hidden}
+#editor-pane.show{display:flex}
+
+#line-numbers{
+  background:var(--bg);color:var(--ln-color);
+  font-family:var(--font-mono);font-size:var(--fs);line-height:var(--lh);
+  padding:12px 8px 12px 10px;text-align:right;user-select:none;
+  overflow:hidden;border-right:1px solid var(--border);min-width:46px;
+  white-space:pre;flex-shrink:0;
+}
+
+#editor{
+  flex:1;background:var(--bg);color:var(--text);resize:none;border:none;outline:none;
+  font-family:var(--font-mono);font-size:var(--fs);line-height:var(--lh);
+  padding:12px 16px;tab-size:4;overflow:auto;user-select:text;caret-color:var(--accent);
+  white-space:pre-wrap;word-wrap:break-word;
+}
+
+/* ── Find bar ── */
+#find-bar{
+  background:var(--bg-bar);border-top:1px solid var(--border);
+  padding:6px 10px;display:none;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap;
+}
+#find-bar.show{display:flex}
+.fi{
+  background:var(--bg-input);border:1px solid var(--border);border-radius:4px;
+  padding:4px 8px;color:var(--text);font-size:12px;outline:none;user-select:text;
+}
+.fi:focus{border-color:var(--accent)}
+.fi::placeholder{color:var(--text-dim)}
+#fi-query{width:180px}
+#fi-replace{width:160px}
+#fi-count{color:var(--text-dim);font-size:11px;min-width:52px}
+
+/* ── Status bar ── */
+#statusbar{
+  background:var(--status-bg);color:var(--status-txt);
+  height:22px;display:flex;align-items:center;gap:14px;padding:0 12px;
+  font-size:11px;flex-shrink:0;
+}
+.st{opacity:.9;white-space:nowrap}
+
+/* ── Toast ── */
+#toast{
+  position:fixed;bottom:30px;right:18px;background:#323232;color:#fff;
+  padding:9px 15px;border-radius:6px;font-size:12px;pointer-events:none;
+  opacity:0;transform:translateY(6px);transition:opacity .18s,transform .18s;z-index:999;
+}
+#toast.show{opacity:1;transform:translateY(0)}
+
+/* ── Modal ── */
+#modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.55);
+  display:none;align-items:center;justify-content:center;z-index:1000;
+}
+#modal-overlay.show{display:flex}
+.modal{
+  background:var(--bg-bar);border:1px solid var(--border);border-radius:8px;
+  padding:22px 24px;max-width:340px;width:90%;box-shadow:0 8px 28px rgba(0,0,0,.5);
+}
+.modal h3{color:var(--text-bright);font-size:14px;margin-bottom:8px}
+.modal p{color:var(--text-dim);font-size:12px;margin-bottom:18px}
+.modal-acts{display:flex;gap:8px;justify-content:flex-end}
+.btn{
+  padding:6px 14px;border-radius:5px;font-size:12px;cursor:pointer;
+  border:1px solid transparent;transition:background .12s;
+}
+.btn-ghost{background:none;border-color:var(--border);color:var(--text)}
+.btn-ghost:hover{background:var(--bg-hover)}
+.btn-danger{background:var(--danger);color:#fff;border-color:var(--danger)}
+.btn-danger:hover{filter:brightness(1.15)}
+
+/* ── Scrollbar in editor ── */
+#editor::-webkit-scrollbar{width:7px;height:7px}
+#editor::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:4px}
+</style>
+</head>
+<body data-theme="dark">
+<div id="app">
+
+  <!-- Title bar -->
+  <div id="titlebar">
+    <div class="logo">
+      <!-- Logo mark: document page with pen cursor -->
+      <div class="logo-mark">
+        <svg viewBox="0 0 26 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Page shadow / depth -->
+          <path d="M5 3.5A2.5 2.5 0 017.5 1H17l6 6v19.5A2.5 2.5 0 0120.5 29h-13A2.5 2.5 0 015 26.5V3.5z"
+                fill="rgba(79,195,247,0.08)"/>
+          <!-- Page body -->
+          <path d="M4 2.5A2 2 0 016 .5h10.5L22 6v20.5a2 2 0 01-2 2H6a2 2 0 01-2-2V2.5z"
+                fill="rgba(79,195,247,0.13)" stroke="#4fc3f7" stroke-width="1.15"/>
+          <!-- Fold corner triangle -->
+          <path d="M16.5.5V6H22" stroke="#4fc3f7" stroke-width="1.15"
+                stroke-linecap="round" stroke-linejoin="round"
+                fill="rgba(79,195,247,0.22)"/>
+          <!-- Text line 1 (full) -->
+          <line x1="7.5" y1="10" x2="18.5" y2="10"
+                stroke="#4fc3f7" stroke-width="1.3" stroke-linecap="round"/>
+          <!-- Text line 2 (full) -->
+          <line x1="7.5" y1="13.5" x2="18.5" y2="13.5"
+                stroke="#4fc3f7" stroke-width="1.3" stroke-linecap="round"/>
+          <!-- Text line 3 (partial) -->
+          <line x1="7.5" y1="17" x2="14" y2="17"
+                stroke="#4fc3f7" stroke-width="1.3" stroke-linecap="round"/>
+          <!-- Pen tip at bottom-right -->
+          <g transform="translate(13,18)">
+            <!-- Pen body -->
+            <rect x="1.5" y="0" width="4" height="8" rx="1"
+                  fill="#4fc3f7" transform="rotate(-45 3.5 4)"/>
+            <!-- Pen tip -->
+            <path d="M-1.2 8.8 L1.2 6.4 L2.8 8 L0.4 10.4 Z"
+                  fill="#4fc3f7"/>
+            <!-- Ink dot -->
+            <circle cx="-0.4" cy="9.6" r="0.8" fill="#4fc3f7" opacity="0.7"/>
+          </g>
+        </svg>
+      </div>
+      <div class="logo-text">
+        <span class="logo-name">GOPAD</span>
+        <span class="logo-sub">crash-proof notepad</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="main">
+
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <div id="sb-head">
+        <span class="sb-label">Notes</span>
+        <button class="icon-btn" id="btn-new" title="New Note (Ctrl+N)">
+          <svg viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2z"/>
+          </svg>
+        </button>
+      </div>
+      <div id="sb-search">
+        <input type="text" id="search-inp" placeholder="Search notes…" autocomplete="off" />
+      </div>
+      <div id="notes-list"></div>
+    </div>
+
+    <!-- Editor area -->
+    <div id="editor-area">
+
+      <!-- Toolbar -->
+      <div id="toolbar">
+        <input type="text" id="note-title" placeholder="Untitled" autocomplete="off" />
+        <div class="tb-sep"></div>
+
+        <button class="tb-btn" id="btn-open" title="Open file (Ctrl+O)">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h2.764c.958 0 1.76.56 2.311 1H13.5A1.5 1.5 0 0 1 15 4.5v9a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 13.5v-10zM2.5 3a.5.5 0 0 0-.5.5V6h1V4h6V3H2.5zM14 6H2v7.5a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5V6z"/></svg>
+          Open
+        </button>
+
+        <button class="tb-btn" id="btn-save" title="Save to file (Ctrl+S)">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H9.5a1 1 0 0 0-1 1v4.5h2a.5.5 0 0 1 .354.854l-2.5 2.5a.5.5 0 0 1-.708 0l-2.5-2.5A.5.5 0 0 1 5.5 6.5h2V2a2 2 0 0 1 2-2H14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h2.5a.5.5 0 0 1 0 1H2z"/></svg>
+          Save
+        </button>
+
+        <div class="tb-sep"></div>
+
+        <button class="tb-btn" id="btn-find" title="Find & Replace (Ctrl+F)">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>
+          Find
+        </button>
+
+        <div class="tb-sep"></div>
+
+        <button class="tb-btn" id="btn-wrap" title="Toggle word wrap">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 3.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zm9.5-.5a.5.5 0 0 0 0 1h1a.5.5 0 0 0 0-1h-1zm-1.354 2.854a.5.5 0 0 0 .708-.708l-1-1a.5.5 0 0 0-.708 0l-1 1a.5.5 0 0 0 .708.708l.646-.647.646.647z"/></svg>
+          Wrap
+        </button>
+
+        <button class="tb-btn" id="btn-fdec" title="Decrease font size">A−</button>
+        <button class="tb-btn" id="btn-finc" title="Increase font size">A+</button>
+
+        <button class="tb-btn" id="btn-theme" title="Toggle theme">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/></svg>
+          Theme
+        </button>
+
+        <div class="tb-sep"></div>
+
+        <button class="tb-btn danger" id="btn-delete" title="Delete note">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+          Delete
+        </button>
+      </div>
+
+      <!-- Editor/empty wrap -->
+      <div id="editor-wrap">
+
+        <!-- Empty state -->
+        <div id="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+          </svg>
+          <p>Create a note or open a file</p>
+          <button class="btn-new-empty" id="btn-new-empty">New Note</button>
+        </div>
+
+        <!-- Editor pane (hidden until note loaded) -->
+        <div id="editor-pane">
+          <div id="line-numbers">1</div>
+          <textarea id="editor" spellcheck="true"></textarea>
+        </div>
+
+      </div>
+
+      <!-- Find & replace bar -->
+      <div id="find-bar">
+        <span style="color:var(--text-dim);font-size:11px">Find</span>
+        <input class="fi" type="text" id="fi-query" placeholder="Search…" autocomplete="off" />
+        <span id="fi-count">0/0</span>
+        <button class="icon-btn" id="fi-prev" title="Previous (Shift+Enter)">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.646 4.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1-.708.708L8 5.707l-5.646 5.647a.5.5 0 0 1-.708-.708l6-6z"/></svg>
+        </button>
+        <button class="icon-btn" id="fi-next" title="Next (Enter)">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/></svg>
+        </button>
+        <div class="tb-sep"></div>
+        <span style="color:var(--text-dim);font-size:11px">Replace</span>
+        <input class="fi" type="text" id="fi-replace" placeholder="Replace with…" autocomplete="off" />
+        <button class="tb-btn" id="fi-rep-one">One</button>
+        <button class="tb-btn" id="fi-rep-all">All</button>
+        <div class="tb-sep"></div>
+        <button class="icon-btn" id="fi-close" title="Close (Esc)">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
+        </button>
+      </div>
+
+    </div><!-- /editor-area -->
+  </div><!-- /main -->
+
+  <!-- Status bar -->
+  <div id="statusbar">
+    <span class="st" id="st-save">All changes saved</span>
+    <span class="st" id="st-pos">Ln 1, Col 1</span>
+    <span class="st" id="st-words">Words: 0</span>
+    <span class="st" id="st-chars">Chars: 0</span>
+    <span class="st" id="st-file"></span>
+  </div>
+
+</div><!-- /app -->
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Delete confirm modal -->
+<div id="modal-overlay">
+  <div class="modal">
+    <h3 id="modal-title">Delete Note</h3>
+    <p id="modal-msg">This cannot be undone.</p>
+    <div class="modal-acts">
+      <button class="btn btn-ghost" id="modal-cancel">Cancel</button>
+      <button class="btn btn-danger" id="modal-ok">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── State ─────────────────────────────────────────────────────────────────────
+const S = {
+  notes: [],
+  activeId: null,
+  saveTimer: null,
+  fontSize: 14,
+  wordWrap: true,
+  theme: 'dark',
+  findMatches: [],
+  findIdx: 0,
+  confirmCb: null,
+};
+
+// ── DOM ───────────────────────────────────────────────────────────────────────
+const q  = id => document.getElementById(id);
+const ED = q('editor');
+const LN = q('line-numbers');
+const EP = q('editor-pane');
+const ES = q('empty-state');
+const FB = q('find-bar');
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+let toastTimer;
+function toast(msg, ms=2200){
+  const t = q('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+}
+
+function fmtDate(iso){
+  const d = new Date(iso), now = new Date(), diff = now - d;
+  if(diff < 60e3)  return 'just now';
+  if(diff < 3600e3) return Math.floor(diff/60e3) + 'm ago';
+  if(diff < 86400e3) return Math.floor(diff/3600e3) + 'h ago';
+  return d.toLocaleDateString();
+}
+
+function showConfirm(title, msg, cb){
+  q('modal-title').textContent = title;
+  q('modal-msg').textContent   = msg;
+  S.confirmCb = cb;
+  q('modal-overlay').classList.add('show');
+}
+
+q('modal-ok').addEventListener('click', () => {
+  q('modal-overlay').classList.remove('show');
+  if(S.confirmCb) S.confirmCb();
+  S.confirmCb = null;
+});
+q('modal-cancel').addEventListener('click', () => {
+  q('modal-overlay').classList.remove('show');
+  S.confirmCb = null;
+});
+
+// ── Notes list ────────────────────────────────────────────────────────────────
+async function loadNotes(){
+  const r = await apiListNotes();
+  if(!r.ok){ toast('Failed to load notes'); return; }
+  S.notes = r.data || [];
+  renderList();
+}
+
+function renderList(filter=''){
+  const nl = q('notes-list');
+  nl.innerHTML = '';
+  const f = filter.toLowerCase();
+  const visible = f
+    ? S.notes.filter(n => n.title.toLowerCase().includes(f) || n.content.toLowerCase().includes(f))
+    : S.notes;
+
+  if(!visible.length){
+    nl.innerHTML = '<div style="padding:14px 10px;color:var(--text-dim);font-size:12px;text-align:center">No notes</div>';
+    return;
+  }
+
+  visible.forEach(n => {
+    const el = document.createElement('div');
+    el.className = 'ni' + (n.id === S.activeId ? ' active' : '');
+    el.dataset.id = n.id;
+    el.innerHTML = `
+      <div class="ni-info">
+        <div class="ni-title">${esc(n.title||'Untitled')}</div>
+        <div class="ni-date">${fmtDate(n.updated_at)}</div>
+      </div>
+      <button class="ni-del" data-id="${n.id}" title="Delete">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
+      </button>`;
+
+    el.addEventListener('click', e => {
+      if(!e.target.closest('.ni-del')) openNote(n.id);
+    });
+    el.querySelector('.ni-del').addEventListener('click', e => {
+      e.stopPropagation();
+      confirmDelete(n.id, n.title);
+    });
+    nl.appendChild(el);
+  });
+}
+
+// ── Open / create note ────────────────────────────────────────────────────────
+async function openNote(id){
+  const r = await apiGetNote(id);
+  if(!r.ok){ toast('Failed to load note'); return; }
+  const n = r.data;
+  S.activeId = id;
+
+  q('note-title').value = n.title || '';
+  ED.value = n.content || '';
+  updateLineNumbers();
+  updateStatus();
+  updateFileTag(n.file_path);
+
+  ES.style.display  = 'none';
+  EP.classList.add('show');
+  ED.focus();
+
+  document.querySelectorAll('.ni').forEach(el =>
+    el.classList.toggle('active', parseInt(el.dataset.id) === id));
+}
+
+async function newNote(){
+  const r = await apiCreateNote();
+  if(!r.ok){ toast('Failed to create note'); return; }
+  S.notes.unshift(r.data);
+  renderList(q('search-inp').value);
+  await openNote(r.data.id);
+}
+
+async function confirmDelete(id, title){
+  showConfirm('Delete Note', `"${title||'Untitled'}" will be permanently deleted.`, async () => {
+    const r = await apiDeleteNote(id);
+    if(!r.ok){ toast('Delete failed'); return; }
+    S.notes = S.notes.filter(n => n.id !== id);
+    if(S.activeId === id){
+      S.activeId = null;
+      q('note-title').value = '';
+      ED.value = '';
+      updateLineNumbers();
+      updateStatus();
+      updateFileTag('');
+      EP.classList.remove('show');
+      ES.style.display = '';
+    }
+    renderList(q('search-inp').value);
+    toast('Note deleted');
+  });
+}
+
+// ── Auto-save ─────────────────────────────────────────────────────────────────
+function scheduleSave(){
+  clearTimeout(S.saveTimer);
+  q('st-save').textContent = 'Saving…';
+  S.saveTimer = setTimeout(flushSave, 900);
+}
+
+async function flushSave(){
+  if(!S.activeId) return;
+  const title   = q('note-title').value.trim() || 'Untitled';
+  const content = ED.value;
+  const r = await apiUpdateNote(S.activeId, title, content);
+  if(r.ok){
+    q('st-save').textContent = 'All changes saved';
+    const idx = S.notes.findIndex(n => n.id === S.activeId);
+    if(idx >= 0){
+      S.notes[idx].title   = title;
+      S.notes[idx].content = content;
+      S.notes[idx].updated_at = new Date().toISOString();
+      // Move to top
+      const [n] = S.notes.splice(idx, 1);
+      S.notes.unshift(n);
+    }
+    renderList(q('search-inp').value);
+  } else {
+    q('st-save').textContent = 'Save failed!';
+  }
+}
+
+// ── Line numbers ──────────────────────────────────────────────────────────────
+function updateLineNumbers(){
+  const count = (ED.value.match(/\n/g)||[]).length + 1;
+  let s = '';
+  for(let i=1;i<=count;i++) s += i + '\n';
+  LN.textContent = s;
+  LN.scrollTop = ED.scrollTop;
+}
+
+// ── Status bar ────────────────────────────────────────────────────────────────
+function updateStatus(){
+  const txt = ED.value;
+  const pos = ED.selectionStart;
+  const before = txt.substring(0, pos);
+  const line = before.split('\n').length;
+  const col  = pos - before.lastIndexOf('\n');
+  q('st-pos').textContent   = `Ln ${line}, Col ${col}`;
+  q('st-words').textContent = `Words: ${txt.trim() ? txt.trim().split(/\s+/).length : 0}`;
+  q('st-chars').textContent = `Chars: ${txt.length}`;
+}
+
+function updateFileTag(path){
+  q('st-file').textContent = path ? '  📄 ' + path.split('/').pop() : '';
+}
+
+// ── Editor events ─────────────────────────────────────────────────────────────
+ED.addEventListener('input', () => {
+  updateLineNumbers();
+  updateStatus();
+  scheduleSave();
+});
+
+ED.addEventListener('scroll', () => {
+  LN.scrollTop = ED.scrollTop;
+});
+
+ED.addEventListener('click',  updateStatus);
+ED.addEventListener('keyup',  updateStatus);
+
+ED.addEventListener('keydown', e => {
+  // Tab → 4 spaces
+  if(e.key === 'Tab'){
+    e.preventDefault();
+    const s = ED.selectionStart, en = ED.selectionEnd;
+    ED.value = ED.value.substring(0,s) + '    ' + ED.value.substring(en);
+    ED.selectionStart = ED.selectionEnd = s + 4;
+    updateLineNumbers();
+    scheduleSave();
+    return;
+  }
+  // Ctrl+S → flush + save to file
+  if(e.ctrlKey && e.key === 's'){
+    e.preventDefault();
+    clearTimeout(S.saveTimer);
+    flushSave().then(saveToFile);
+    return;
+  }
+  // Ctrl+F
+  if(e.ctrlKey && e.key === 'f'){
+    e.preventDefault();
+    openFind();
+  }
+});
+
+// ── Find & Replace ────────────────────────────────────────────────────────────
+function openFind(){
+  FB.classList.add('show');
+  q('fi-query').focus();
+  q('fi-query').select();
+  doFind();
+}
+function closeFind(){
+  FB.classList.remove('show');
+  S.findMatches = [];
+  q('fi-count').textContent = '0/0';
+  ED.focus();
+}
+
+function doFind(){
+  const needle = q('fi-query').value;
+  S.findMatches = [];
+  S.findIdx = 0;
+  if(!needle){ q('fi-count').textContent = '0/0'; return; }
+  const hay = ED.value.toLowerCase();
+  const ndl = needle.toLowerCase();
+  let i = 0;
+  while((i = hay.indexOf(ndl, i)) !== -1){ S.findMatches.push(i); i++; }
+  updateFindCount();
+  if(S.findMatches.length) highlightMatch();
+}
+
+function updateFindCount(){
+  const tot = S.findMatches.length;
+  q('fi-count').textContent = tot ? `${S.findIdx+1}/${tot}` : '0/0';
+}
+
+function highlightMatch(){
+  if(!S.findMatches.length) return;
+  const pos = S.findMatches[S.findIdx];
+  const len = q('fi-query').value.length;
+  ED.focus();
+  ED.setSelectionRange(pos, pos+len);
+  const lh = parseFloat(getComputedStyle(ED).lineHeight)||22;
+  const line = ED.value.substring(0, pos).split('\n').length;
+  ED.scrollTop = Math.max(0,(line-4)*lh);
+  LN.scrollTop = ED.scrollTop;
+}
+
+function findNext(){ if(!S.findMatches.length) return; S.findIdx=(S.findIdx+1)%S.findMatches.length; updateFindCount(); highlightMatch(); }
+function findPrev(){ if(!S.findMatches.length) return; S.findIdx=(S.findIdx-1+S.findMatches.length)%S.findMatches.length; updateFindCount(); highlightMatch(); }
+
+function replaceOne(){
+  if(!S.findMatches.length) return;
+  const pos = S.findMatches[S.findIdx];
+  const needle = q('fi-query').value;
+  const rep    = q('fi-replace').value;
+  ED.value = ED.value.substring(0,pos) + rep + ED.value.substring(pos+needle.length);
+  scheduleSave();
+  doFind();
+}
+
+function replaceAll(){
+  const needle = q('fi-query').value;
+  if(!needle) return;
+  const rep = q('fi-replace').value;
+  const cnt = S.findMatches.length;
+  // Case-insensitive replace all
+  ED.value = ED.value.split(new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi')).join(rep);
+  scheduleSave();
+  doFind();
+  toast(`Replaced ${cnt} occurrence${cnt!==1?'s':''}`);
+}
+
+q('fi-query').addEventListener('input', doFind);
+q('fi-query').addEventListener('keydown', e => {
+  if(e.key==='Enter')  { e.shiftKey ? findPrev() : findNext(); }
+  if(e.key==='Escape') closeFind();
+});
+q('fi-next').addEventListener('click', findNext);
+q('fi-prev').addEventListener('click', findPrev);
+q('fi-rep-one').addEventListener('click', replaceOne);
+q('fi-rep-all').addEventListener('click', replaceAll);
+q('fi-close').addEventListener('click', closeFind);
+
+// ── File operations ───────────────────────────────────────────────────────────
+async function saveToFile(){
+  if(!S.activeId) return;
+  const r = await apiSaveToFile(S.activeId);
+  if(!r.ok){ toast('Save failed: ' + (r.error||'unknown')); return; }
+  if(r.data){
+    const idx = S.notes.findIndex(n => n.id === S.activeId);
+    if(idx >= 0) S.notes[idx].file_path = r.data;
+    updateFileTag(r.data);
+    toast('Saved → ' + r.data.split('/').pop());
+  }
+}
+
+async function openFile(){
+  const r = await apiOpenFile();
+  if(!r.ok){ toast('Open failed: ' + (r.error||'')); return; }
+  if(r.data){
+    S.notes.unshift(r.data);
+    renderList(q('search-inp').value);
+    await openNote(r.data.id);
+    toast('Opened ' + r.data.title);
+  }
+}
+
+// ── Font & theme ──────────────────────────────────────────────────────────────
+function setFontSize(sz){
+  S.fontSize = Math.max(10, Math.min(36, sz));
+  document.documentElement.style.setProperty('--fs', S.fontSize+'px');
+  updateLineNumbers();
+  apiSetSetting('fontSize', String(S.fontSize));
+}
+
+function toggleWrap(){
+  S.wordWrap = !S.wordWrap;
+  ED.style.whiteSpace  = S.wordWrap ? 'pre-wrap' : 'pre';
+  ED.style.overflowX   = S.wordWrap ? 'hidden'   : 'auto';
+  q('btn-wrap').classList.toggle('active', S.wordWrap);
+  apiSetSetting('wordWrap', S.wordWrap ? '1' : '0');
+}
+
+function setTheme(t){
+  S.theme = t;
+  document.body.dataset.theme = t;
+  apiSetSetting('theme', t);
+}
+
+// ── Button bindings ───────────────────────────────────────────────────────────
+q('btn-new').addEventListener('click', newNote);
+q('btn-new-empty').addEventListener('click', newNote);
+q('btn-open').addEventListener('click', openFile);
+q('btn-save').addEventListener('click', () => { clearTimeout(S.saveTimer); flushSave().then(saveToFile); });
+q('btn-delete').addEventListener('click', () => {
+  if(!S.activeId) return;
+  const n = S.notes.find(x => x.id === S.activeId);
+  confirmDelete(S.activeId, n?.title);
+});
+q('btn-find').addEventListener('click', openFind);
+q('btn-wrap').addEventListener('click', toggleWrap);
+q('btn-fdec').addEventListener('click', () => setFontSize(S.fontSize - 1));
+q('btn-finc').addEventListener('click', () => setFontSize(S.fontSize + 1));
+q('btn-theme').addEventListener('click', () => setTheme(S.theme === 'dark' ? 'light' : 'dark'));
+
+q('note-title').addEventListener('input', scheduleSave);
+
+q('search-inp').addEventListener('input', e => renderList(e.target.value));
+
+// Global shortcuts
+document.addEventListener('keydown', e => {
+  if(e.ctrlKey && e.key === 'n'){ e.preventDefault(); newNote(); }
+  if(e.ctrlKey && e.key === 'o'){ e.preventDefault(); openFile(); }
+  if(e.key === 'Escape'){
+    if(FB.classList.contains('show')) closeFind();
+    q('modal-overlay').classList.remove('show');
+  }
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init(){
+  const [themeR, fontR, wrapR] = await Promise.all([
+    apiGetSetting('theme'),
+    apiGetSetting('fontSize'),
+    apiGetSetting('wordWrap'),
+  ]);
+
+  if(themeR.ok && themeR.data) setTheme(themeR.data);
+  if(fontR.ok  && fontR.data)  setFontSize(parseInt(fontR.data)||14);
+  if(wrapR.ok  && wrapR.data){ S.wordWrap = wrapR.data !== '0'; }
+
+  // Apply word wrap initial state
+  ED.style.whiteSpace = S.wordWrap ? 'pre-wrap' : 'pre';
+  ED.style.overflowX  = S.wordWrap ? 'hidden'   : 'auto';
+  q('btn-wrap').classList.toggle('active', S.wordWrap);
+
+  await loadNotes();
+
+  if(S.notes.length > 0){
+    await openNote(S.notes[0].id);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
