@@ -662,6 +662,26 @@ ED.addEventListener('click',  updateStatus);
 ED.addEventListener('keyup',  updateStatus);
 
 ED.addEventListener('keydown', e => {
+  // Ctrl+Z → Undo (allow browser native)
+  if(e.ctrlKey && e.key === 'z' && !e.shiftKey){
+    // Let browser handle native undo, then trigger save after
+    setTimeout(() => {
+      updateLineNumbers();
+      updateStatus();
+      scheduleSave();
+    }, 0);
+    return;
+  }
+  // Ctrl+Shift+Z or Ctrl+Y → Redo (allow browser native)
+  if((e.ctrlKey && e.shiftKey && e.key === 'z') || (e.ctrlKey && e.key === 'y')){
+    // Let browser handle native redo, then trigger save after
+    setTimeout(() => {
+      updateLineNumbers();
+      updateStatus();
+      scheduleSave();
+    }, 0);
+    return;
+  }
   // Tab → 4 spaces
   if(e.key === 'Tab'){
     e.preventDefault();
