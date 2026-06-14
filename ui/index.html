@@ -32,7 +32,7 @@
 [data-theme=light]{
   --bg:#ffffff;
   --bg-side:#f3f3f3;
-  --bg-bar:#ececec;
+  --bg-bar:#ececec; 
   --bg-hover:#e8e8e8;
   --bg-active:#d6ebff;
   --bg-input:#fff;
@@ -454,6 +454,79 @@ const S = {
   confirmCb: null,
 };
 
+// ── Undo Manager ──────────────────────────────────────────────────────────────
+const UndoMgr = {
+  stack: [],
+  idx: -1,
+  max: 100,
+  debounceTimer: null,
+  lastSave: 0,
+  
+  save(){
+    const content = ED.value;
+    const pos = ED.selectionStart;
+    const now = Date.now();
+    
+    // Don't save if same as current state
+    if(this.idx >= 0 && this.stack[this.idx].content === content) return;
+    
+    // Discard any redo states
+    this.stack = this.stack.slice(0, this.idx + 1);
+    
+    // Add new state
+    this.stack.push({content, pos, time: now});
+    if(this.stack.length > this.max) this.stack.shift();
+    else this.idx++;
+    
+    this.lastSave = now;
+  },
+  
+  record(){
+    // Invalidate redo branch immediately on first post-undo edit
+    if(this.idx < this.stack.length - 1){
+      this.stack = this.stack.slice(0, this.idx + 1);
+    }
+    // Debounce: save after 300ms pause or every 800ms while typing
+    clearTimeout(this.debounceTimer);
+    const now = Date.now();
+    if(now - this.lastSave > 800){
+      this.save();
+    } else {
+      this.debounceTimer = setTimeout(() => this.save(), 300);
+    }
+  },
+  
+  undo(){
+    if(this.idx <= 0) return false; // Nothing to undo
+    this.idx--;
+    const state = this.stack[this.idx];
+    ED.value = state.content;
+    ED.selectionStart = ED.selectionEnd = state.pos;
+    return true;
+  },
+  
+  redo(){
+    if(this.idx >= this.stack.length - 1) return false; // Nothing to redo
+    this.idx++;
+    const state = this.stack[this.idx];
+    ED.value = state.content;
+    ED.selectionStart = ED.selectionEnd = state.pos;
+    return true;
+  },
+  
+  reset(){
+    this.stack = [];
+    this.idx = -1;
+    this.lastSave = 0;
+    clearTimeout(this.debounceTimer);
+  },
+  
+  init(content){
+    this.reset();
+    this.save(); // Save initial state
+  }
+};
+
 // ── DOM ───────────────────────────────────────────────────────────────────────
 const q  = id => document.getElementById(id);
 const ED = q('editor');
@@ -553,6 +626,7 @@ async function openNote(id){
 
   q('note-title').value = n.title || '';
   ED.value = n.content || '';
+  UndoMgr.init(); // Initialize undo stack with initial state
   updateLineNumbers();
   updateStatus();
   updateFileTag(n.file_path);
@@ -649,6 +723,7 @@ function updateFileTag(path){
 
 // ── Editor events ─────────────────────────────────────────────────────────────
 ED.addEventListener('input', () => {
+  UndoMgr.record();
   updateLineNumbers();
   updateStatus();
   scheduleSave();
@@ -662,13 +737,35 @@ ED.addEventListener('click',  updateStatus);
 ED.addEventListener('keyup',  updateStatus);
 
 ED.addEventListener('keydown', e => {
+  // Ctrl+Z → Undo
+  if(e.ctrlKey && (e.key === 'z' || e.key === 'Z') && !e.shiftKey){
+    e.preventDefault();
+    if(UndoMgr.undo()){
+      updateLineNumbers();
+      updateStatus();
+      scheduleSave();
+    }
+    return;
+  }
+  // Ctrl+Shift+Z or Ctrl+Y → Redo
+  if((e.ctrlKey && e.shiftKey && (e.key === 'z' || e.key === 'Z')) || (e.ctrlKey && (e.key === 'y' || e.key === 'Y'))){
+    e.preventDefault();
+    if(UndoMgr.redo()){
+      updateLineNumbers();
+      updateStatus();
+      scheduleSave();
+    }
+    return;
+  }
   // Tab → 4 spaces
   if(e.key === 'Tab'){
     e.preventDefault();
     const s = ED.selectionStart, en = ED.selectionEnd;
     ED.value = ED.value.substring(0,s) + '    ' + ED.value.substring(en);
     ED.selectionStart = ED.selectionEnd = s + 4;
+    UndoMgr.record();
     updateLineNumbers();
+    updateStatus();
     scheduleSave();
     return;
   }
@@ -739,6 +836,9 @@ function replaceOne(){
   const needle = q('fi-query').value;
   const rep    = q('fi-replace').value;
   ED.value = ED.value.substring(0,pos) + rep + ED.value.substring(pos+needle.length);
+  UndoMgr.record();
+  updateLineNumbers();
+  updateStatus();
   scheduleSave();
   doFind();
 }
@@ -750,6 +850,9 @@ function replaceAll(){
   const cnt = S.findMatches.length;
   // Case-insensitive replace all
   ED.value = ED.value.split(new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi')).join(rep);
+  UndoMgr.record();
+  updateLineNumbers();
+  updateStatus();
   scheduleSave();
   doFind();
   toast(`Replaced ${cnt} occurrence${cnt!==1?'s':''}`);
