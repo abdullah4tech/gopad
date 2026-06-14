@@ -482,6 +482,10 @@ const UndoMgr = {
   },
   
   record(){
+    // Invalidate redo branch immediately on first post-undo edit
+    if(this.idx < this.stack.length - 1){
+      this.stack = this.stack.slice(0, this.idx + 1);
+    }
     // Debounce: save after 300ms pause or every 800ms while typing
     clearTimeout(this.debounceTimer);
     const now = Date.now();
@@ -759,7 +763,9 @@ ED.addEventListener('keydown', e => {
     const s = ED.selectionStart, en = ED.selectionEnd;
     ED.value = ED.value.substring(0,s) + '    ' + ED.value.substring(en);
     ED.selectionStart = ED.selectionEnd = s + 4;
+    UndoMgr.record();
     updateLineNumbers();
+    updateStatus();
     scheduleSave();
     return;
   }
@@ -830,6 +836,9 @@ function replaceOne(){
   const needle = q('fi-query').value;
   const rep    = q('fi-replace').value;
   ED.value = ED.value.substring(0,pos) + rep + ED.value.substring(pos+needle.length);
+  UndoMgr.record();
+  updateLineNumbers();
+  updateStatus();
   scheduleSave();
   doFind();
 }
@@ -841,6 +850,9 @@ function replaceAll(){
   const cnt = S.findMatches.length;
   // Case-insensitive replace all
   ED.value = ED.value.split(new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi')).join(rep);
+  UndoMgr.record();
+  updateLineNumbers();
+  updateStatus();
   scheduleSave();
   doFind();
   toast(`Replaced ${cnt} occurrence${cnt!==1?'s':''}`);
