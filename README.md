@@ -59,6 +59,7 @@ The UI is HTML/CSS/JS rendered by **WebKitGTK** (the same engine behind GNOME We
 | **Editor** | Monospace font stack, `Tab` → 4 spaces, configurable font size (10–36 px), word wrap toggle |
 | **Themes** | Dark (default) and light; selection persisted to the `settings` table |
 | **Status bar** | Real-time line/column, word count, character count, linked filename |
+| **Undo/Redo** | Full undo history (Ctrl+Z) and redo (Ctrl+Shift+Z / Ctrl+Y); up to 100 states per note |
 | **No Chromium** | Rendering engine is WebKitGTK; binary depends only on system GTK/WebKit libraries |
 
 ---
@@ -146,6 +147,8 @@ The app opens at 1200×800. All notes are loaded from the local database on star
 | `Ctrl+O` | Open file from disk |
 | `Ctrl+S` | Flush pending save + export to file |
 | `Ctrl+F` | Open Find & Replace bar |
+| `Ctrl+Z` | Undo last change |
+| `Ctrl+Shift+Z` / `Ctrl+Y` | Redo previously undone change |
 | `Tab` | Insert 4 spaces (does not move focus) |
 | `Enter` (in find bar) | Next match |
 | `Shift+Enter` (in find bar) | Previous match |
