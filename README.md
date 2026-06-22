@@ -147,6 +147,7 @@ The app opens at 1200×800. All notes are loaded from the local database on star
 | `Ctrl+O` | Open file from disk |
 | `Ctrl+S` | Flush pending save + export to file |
 | `Ctrl+F` | Open Find & Replace bar |
+| `Ctrl+B` | Collapse / expand the notes sidebar |
 | `Ctrl+Z` | Undo last change |
 | `Ctrl+Shift+Z` / `Ctrl+Y` | Redo previously undone change |
 | `Tab` | Insert 4 spaces (does not move focus) |
@@ -191,6 +192,7 @@ CREATE TABLE settings (
 | `theme` | `dark` \| `light` | `dark` |
 | `fontSize` | `10`–`36` (px) | `14` |
 | `wordWrap` | `1` \| `0` | `1` |
+| `sidebar` | `1` (collapsed) \| `0` | `0` |
 
 ### Backup
 
