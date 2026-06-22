@@ -86,7 +86,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size
   display:flex;
   flex-direction:column;
   flex-shrink:0;
+  overflow:hidden;
+  transition:width .26s cubic-bezier(.4,0,.2,1),border-right-color .26s;
 }
+#sidebar.collapsed{width:0;border-right-color:transparent}
+/* Children keep full width while the rail animates, so the list slides out
+   cleanly behind overflow:hidden instead of reflowing mid-collapse. */
+#sb-head,#sb-search,#notes-list{width:var(--sidebar);flex-shrink:0}
 #sb-head{
   padding:10px 10px 8px;
   display:flex;
@@ -103,6 +109,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size
 }
 .icon-btn:hover{background:var(--bg-hover);color:var(--text)}
 .icon-btn svg{width:15px;height:15px}
+
+/* Sidebar collapse toggle — the filled pane fades out when collapsed */
+.sb-toggle .sb-fill{transition:opacity .2s}
+.sb-toggle.collapsed .sb-fill{opacity:0}
 
 #sb-search{padding:7px 8px}
 #sb-search input{
@@ -258,6 +268,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size
 
   <!-- Title bar -->
   <div id="titlebar">
+    <button class="icon-btn sb-toggle" id="sb-toggle" title="Toggle sidebar (Ctrl+B)" aria-label="Toggle sidebar">
+      <svg viewBox="0 0 16 16" fill="none">
+        <rect x="1.5" y="2.5" width="13" height="11" rx="1.6" stroke="currentColor" stroke-width="1.3"/>
+        <rect class="sb-fill" x="2.2" y="3.2" width="4" height="9.6" rx="1" fill="currentColor"/>
+        <line x1="6.3" y1="2.8" x2="6.3" y2="13.2" stroke="currentColor" stroke-width="1.3"/>
+      </svg>
+    </button>
     <div class="logo">
       <!-- Logo mark: document page with pen cursor -->
       <div class="logo-mark">
@@ -449,6 +466,7 @@ const S = {
   fontSize: 14,
   wordWrap: true,
   theme: 'dark',
+  sbCollapsed: false,
   findMatches: [],
   findIdx: 0,
   confirmCb: null,
@@ -915,8 +933,17 @@ function setTheme(t){
   apiSetSetting('theme', t);
 }
 
+function setSidebar(collapsed, persist=true){
+  S.sbCollapsed = collapsed;
+  q('sidebar').classList.toggle('collapsed', collapsed);
+  q('sb-toggle').classList.toggle('collapsed', collapsed);
+  if(persist) apiSetSetting('sidebar', collapsed ? '1' : '0');
+}
+function toggleSidebar(){ setSidebar(!S.sbCollapsed); }
+
 // ── Button bindings ───────────────────────────────────────────────────────────
 q('btn-new').addEventListener('click', newNote);
+q('sb-toggle').addEventListener('click', toggleSidebar);
 q('btn-new-empty').addEventListener('click', newNote);
 q('btn-open').addEventListener('click', openFile);
 q('btn-save').addEventListener('click', () => { clearTimeout(S.saveTimer); flushSave().then(saveToFile); });
@@ -939,6 +966,7 @@ q('search-inp').addEventListener('input', e => renderList(e.target.value));
 document.addEventListener('keydown', e => {
   if(e.ctrlKey && e.key === 'n'){ e.preventDefault(); newNote(); }
   if(e.ctrlKey && e.key === 'o'){ e.preventDefault(); openFile(); }
+  if(e.ctrlKey && e.key === 'b'){ e.preventDefault(); toggleSidebar(); }
   if(e.key === 'Escape'){
     if(FB.classList.contains('show')) closeFind();
     q('modal-overlay').classList.remove('show');
@@ -947,15 +975,17 @@ document.addEventListener('keydown', e => {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init(){
-  const [themeR, fontR, wrapR] = await Promise.all([
+  const [themeR, fontR, wrapR, sbR] = await Promise.all([
     apiGetSetting('theme'),
     apiGetSetting('fontSize'),
     apiGetSetting('wordWrap'),
+    apiGetSetting('sidebar'),
   ]);
 
   if(themeR.ok && themeR.data) setTheme(themeR.data);
   if(fontR.ok  && fontR.data)  setFontSize(parseInt(fontR.data)||14);
   if(wrapR.ok  && wrapR.data){ S.wordWrap = wrapR.data !== '0'; }
+  if(sbR.ok    && sbR.data === '1') setSidebar(true, false);
 
   // Apply word wrap initial state
   ED.style.whiteSpace = S.wordWrap ? 'pre-wrap' : 'pre';
