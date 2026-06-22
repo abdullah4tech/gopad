@@ -83,7 +83,7 @@ body{
   --wails-draggable:drag;            /* the bar itself drags the window */
 }
 /* Interactive groups opt out of dragging (custom prop inherits, so set on each) */
-.sb-toggle,.menubar,.win-ctrls{--wails-draggable:no-drag}
+.sb-toggle,.menubar,.qbar,.win-ctrls{--wails-draggable:no-drag}
 
 /* ── File-based icons (Tabler set, via CSS mask so they inherit currentColor) */
 .ic{
@@ -97,7 +97,24 @@ body{
 .icon-btn .ic{width:16px;height:16px}
 
 /* ── Custom window controls ───────────────────────────────────────────────*/
-.win-ctrls{display:flex;align-items:center;gap:1px;margin-left:auto}
+/* Quick-access bar (right side of the header) */
+.qbar{display:flex;align-items:center;gap:2px;margin-left:auto;padding-right:8px}
+.theme-btn{
+  background:none;border:none;cursor:pointer;width:26px;height:26px;padding:3px;
+  display:flex;align-items:center;justify-content:center;color:var(--text-dim);
+  transition:color .14s,transform .1s;
+}
+.theme-btn:hover{color:var(--accent)}
+.theme-btn:active{transform:scale(.9)}
+.theme-btn svg{width:100%;height:100%;display:block}
+.theme-btn .tb-halves,.theme-btn .tb-ring{
+  transform-box:view-box;transform-origin:center;transition:transform .4s ease-in-out;
+}
+.theme-btn .tb-shadow{fill:var(--bg-bar)}
+.theme-btn.is-dark .tb-halves{transform:rotate(-180deg)}
+.theme-btn.is-dark .tb-ring{transform:rotate(180deg)}
+
+.win-ctrls{display:flex;align-items:center;gap:1px}
 .win-btn{
   background:none;border:none;color:var(--text-dim);cursor:pointer;
   width:30px;height:25px;border-radius:7px;margin:4px 0;
@@ -448,6 +465,19 @@ body{
           <button class="menu-item" data-act="about">About GoPad</button>
         </div>
       </div>
+    </div>
+
+    <!-- Quick-access bar -->
+    <div class="qbar" id="qbar">
+      <button class="theme-btn" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">
+        <svg viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <g class="tb-halves">
+            <path d="M120 67.5C149.25 67.5 172.5 90.75 172.5 120C172.5 149.25 149.25 172.5 120 172.5" fill="currentColor"/>
+            <path class="tb-shadow" d="M120 67.5C90.75 67.5 67.5 90.75 67.5 120C67.5 149.25 90.75 172.5 120 172.5"/>
+          </g>
+          <path class="tb-ring" d="M120 3.75C55.5 3.75 3.75 55.5 3.75 120C3.75 184.5 55.5 236.25 120 236.25C184.5 236.25 236.25 184.5 236.25 120C236.25 55.5 184.5 3.75 120 3.75ZM120 214.5V172.5C90.75 172.5 67.5 149.25 67.5 120C67.5 90.75 90.75 67.5 120 67.5V25.5C172.5 25.5 214.5 67.5 214.5 120C214.5 172.5 172.5 214.5 120 214.5Z" fill="currentColor"/>
+        </svg>
+      </button>
     </div>
 
     <!-- Custom window controls -->
@@ -829,14 +859,14 @@ const SmoothCaret = (() => {
       const cs = getComputedStyle(ED);
       const c  = coords(cs);
       const fs = parseFloat(cs.fontSize), lh = parseFloat(cs.lineHeight) || fs*1.6;
-      const h  = Math.round(fs*1.15);
+      const h  = Math.round(fs*1.05);
       const er = ED.getBoundingClientRect(), pr = EP.getBoundingClientRect();
       const vx = er.left + c.left - ED.scrollLeft;
       const vy = er.top  + c.top  - ED.scrollTop;
       if(vx < er.left-2 || vx > er.right+2 || vy < er.top-2 || vy > er.bottom+2){ hide(); return; }
       caret.style.height = h + 'px';
-      tgt.x = vx - pr.left;
-      tgt.y = vy - pr.top + (lh - h)/2;
+      tgt.x = Math.round(vx - pr.left);
+      tgt.y = Math.round(vy - pr.top + (lh - h)/2 - fs*0.08);   // nudge up to optical centre
       if(!shown){ cur.x = tgt.x; cur.y = tgt.y; vel.x = vel.y = 0; shown = true; caret.style.display = 'block'; }
       if(!raf) loop();
       pulse();
@@ -949,6 +979,30 @@ function toggleWrap(){
   App().SetSetting('wordWrap',S.wordWrap?'1':'0');
 }
 function setTheme(t){ S.theme=t; document.body.dataset.theme=t; App().SetSetting('theme',t); }
+function syncThemeBtn(){ const b=q('theme-btn'); if(b) b.classList.toggle('is-dark', S.theme==='dark'); }
+
+// Theme switch with a View-Transitions circular reveal (top-left origin, blurred).
+function ensureThemeTransitionCSS(){
+  if(document.getElementById('theme-vt')) return;
+  const st=document.createElement('style'); st.id='theme-vt';
+  st.textContent=`
+::view-transition-group(root){animation-duration:.9s;animation-timing-function:cubic-bezier(.16,1,.3,1)}
+::view-transition-new(root){animation-name:gp-theme-reveal}
+::view-transition-old(root){animation:none;z-index:-1}
+@keyframes gp-theme-reveal{
+  from{clip-path:circle(0% at 0% 0%);filter:blur(8px)}
+  50%{filter:blur(4px)}
+  to{clip-path:circle(150% at 0% 0%);filter:blur(0)}
+}`;
+  document.head.appendChild(st);
+}
+function toggleThemeAnimated(){
+  const next = S.theme==='dark' ? 'light' : 'dark';
+  ensureThemeTransitionCSS();
+  const swap = () => { setTheme(next); syncThemeBtn(); };
+  if(document.startViewTransition) document.startViewTransition(swap);
+  else swap();
+}
 
 function setSidebar(collapsed,persist=true){
   S.sbCollapsed=collapsed;
@@ -962,6 +1016,7 @@ function toggleSidebar(){ setSidebar(!S.sbCollapsed); }
 q('btn-new').addEventListener('click',newNote);
 q('btn-new-empty').addEventListener('click',newNote);
 q('sb-toggle').addEventListener('click',toggleSidebar);
+q('theme-btn').addEventListener('click',toggleThemeAnimated);
 q('note-title').addEventListener('input',scheduleSave);
 
 // Custom window controls (frameless window)
@@ -1006,7 +1061,7 @@ const MENU_ACTIONS={
   wrap:toggleWrap,
   finc:()=>setFontSize(S.fontSize+1),
   fdec:()=>setFontSize(S.fontSize-1),
-  theme:()=>setTheme(S.theme==='dark'?'light':'dark'),
+  theme:toggleThemeAnimated,
   shortcuts:()=>showInfo('Keyboard shortcuts',SHORTCUTS_HTML),
   about:()=>showInfo('GoPad',ABOUT_HTML),
 };
@@ -1030,6 +1085,7 @@ async function init(){
       App().GetSetting('wordWrap'), App().GetSetting('sidebar'),
     ]);
     if(theme) setTheme(theme);
+    syncThemeBtn();
     if(font) setFontSize(parseInt(font)||14);
     if(wrap) S.wordWrap=wrap!=='0';
     if(sidebar==='1') setSidebar(true,false);
