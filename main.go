@@ -1,43 +1,40 @@
 package main
 
 import (
-	_ "embed"
+	"embed"
 	"fmt"
 	"os"
-	"path/filepath"
 
-	webview "github.com/webview/webview_go"
+	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/options"
+	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
 )
 
-//go:embed ui/index.html
-var indexHTML string
+//go:embed all:frontend/dist
+var assets embed.FS
 
 func main() {
-	dbPath := getDBPath()
-	db, err := initDB(dbPath)
+	app := NewApp()
+
+	err := wails.Run(&options.App{
+		Title:            "GoPad",
+		Width:            1200,
+		Height:           800,
+		MinWidth:         720,
+		MinHeight:        480,
+		Frameless:        true,
+		AssetServer:      &assetserver.Options{Assets: assets},
+		BackgroundColour: &options.RGBA{R: 15, G: 20, B: 25, A: 1},
+		OnStartup:        app.startup,
+		OnShutdown:       app.shutdown,
+		Bind:             []interface{}{app},
+		Linux: &linux.Options{
+			ProgramName: "GoPad",
+		},
+	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to init db: %v\n", err)
+		fmt.Fprintf(os.Stderr, "gopad: %v\n", err)
 		os.Exit(1)
 	}
-	defer db.Close()
-
-	w := webview.New(true)
-	defer w.Destroy()
-	w.SetTitle("GoPad")
-	w.SetSize(1200, 800, webview.HintNone)
-
-	api := &API{db: db, w: w}
-	api.bind()
-
-	w.SetHtml(indexHTML)
-	w.Run()
-}
-
-func getDBPath() string {
-	home, _ := os.UserHomeDir()
-	dir := filepath.Join(home, ".local", "share", "gopad")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		dir = "."
-	}
-	return filepath.Join(dir, "notes.db")
 }
