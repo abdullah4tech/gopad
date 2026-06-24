@@ -324,6 +324,7 @@ body{
   overflow:hidden;min-width:52px;white-space:pre;flex-shrink:0;
   border-right:1px solid var(--border);
 }
+body.no-linenums #line-numbers{display:none}
 #editor{
   flex:1;background:var(--bg);color:var(--text);resize:none;border:none;outline:none;
   font-family:var(--font-mono);font-size:var(--fs);line-height:var(--lh);
@@ -451,6 +452,7 @@ body{
         <div class="menu-pop">
           <button class="menu-item" data-act="sidebar">Toggle sidebar<span class="menu-key">Ctrl+B</span></button>
           <button class="menu-item" data-act="wrap">Toggle word wrap</button>
+          <button class="menu-item" data-act="linenums" id="mi-linenums">Hide line numbers</button>
           <div class="menu-div"></div>
           <button class="menu-item" data-act="finc">Larger text<span class="menu-key">A+</span></button>
           <button class="menu-item" data-act="fdec">Smaller text<span class="menu-key">A−</span></button>
@@ -605,7 +607,7 @@ const App = () => window.go.main.App;
 const DEFAULT_FONT = 14;
 const S = {
   notes:[], activeId:null, saveTimer:null,
-  fontSize:DEFAULT_FONT, wordWrap:true, theme:'dark', sbCollapsed:false,
+  fontSize:DEFAULT_FONT, wordWrap:true, theme:'dark', sbCollapsed:false, lineNums:true,
   findMatches:[], findIdx:0, confirmCb:null,
 };
 
@@ -979,6 +981,17 @@ function toggleWrap(){
   SmoothCaret.update();
   App().SetSetting('wordWrap',S.wordWrap?'1':'0');
 }
+// Reflect the current line-number state in the DOM + menu label (no persist).
+function applyLineNums(){
+  document.body.classList.toggle('no-linenums',!S.lineNums);
+  const mi=q('mi-linenums'); if(mi) mi.textContent=S.lineNums?'Hide line numbers':'Show line numbers';
+  SmoothCaret.update();
+}
+function toggleLineNumbers(){
+  S.lineNums=!S.lineNums;
+  applyLineNums();
+  App().SetSetting('lineNumbers',S.lineNums?'1':'0');
+}
 function setTheme(t){ S.theme=t; document.body.dataset.theme=t; App().SetSetting('theme',t); }
 function syncThemeBtn(){ const b=q('theme-btn'); if(b) b.classList.toggle('is-dark', S.theme==='dark'); }
 
@@ -1060,6 +1073,7 @@ const MENU_ACTIONS={
   find:openFind,
   sidebar:toggleSidebar,
   wrap:toggleWrap,
+  linenums:toggleLineNumbers,
   finc:()=>setFontSize(S.fontSize+1),
   fdec:()=>setFontSize(S.fontSize-1),
   theme:toggleThemeAnimated,
@@ -1099,19 +1113,22 @@ document.addEventListener('wheel',e=>{
 // ── Init (wait for Wails bindings, then hydrate) ────────────────────────────
 async function init(){
   try{
-    const [theme,font,wrap,sidebar]=await Promise.all([
+    const [theme,font,wrap,sidebar,lineNums]=await Promise.all([
       App().GetSetting('theme'), App().GetSetting('fontSize'),
       App().GetSetting('wordWrap'), App().GetSetting('sidebar'),
+      App().GetSetting('lineNumbers'),
     ]);
     if(theme) setTheme(theme);
     syncThemeBtn();
     if(font) setFontSize(parseInt(font)||14);
     if(wrap) S.wordWrap=wrap!=='0';
     if(sidebar==='1') setSidebar(true,false);
+    if(lineNums) S.lineNums=lineNums!=='0';
   }catch(e){ /* first run, defaults are fine */ }
 
   ED.style.whiteSpace=S.wordWrap?'pre-wrap':'pre';
   ED.style.overflowX=S.wordWrap?'hidden':'auto';
+  applyLineNums();
 
   await loadNotes();
   if(S.notes.length>0) await openNote(S.notes[0].id);
