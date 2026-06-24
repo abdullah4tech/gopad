@@ -602,9 +602,10 @@ body{
 const App = () => window.go.main.App;
 
 // ── State ───────────────────────────────────────────────────────────────────
+const DEFAULT_FONT = 14;
 const S = {
   notes:[], activeId:null, saveTimer:null,
-  fontSize:14, wordWrap:true, theme:'dark', sbCollapsed:false,
+  fontSize:DEFAULT_FONT, wordWrap:true, theme:'dark', sbCollapsed:false,
   findMatches:[], findIdx:0, confirmCb:null,
 };
 
@@ -1074,8 +1075,26 @@ document.addEventListener('keydown',e=>{
   if(e.ctrlKey && e.key==='n'){ e.preventDefault(); newNote(); }
   if(e.ctrlKey && e.key==='o'){ e.preventDefault(); openFile(); }
   if(e.ctrlKey && e.key==='b'){ e.preventDefault(); toggleSidebar(); }
+  // Ctrl +/-/0 must zoom the editor text, not the whole WebKit page.
+  if(e.ctrlKey && (e.key==='='||e.key==='+')){ e.preventDefault(); setFontSize(S.fontSize+1); return; }
+  if(e.ctrlKey && (e.key==='-'||e.key==='_')){ e.preventDefault(); setFontSize(S.fontSize-1); return; }
+  if(e.ctrlKey && e.key==='0'){ e.preventDefault(); setFontSize(DEFAULT_FONT); return; }
   if(e.key==='Escape'){ closeMenus(); if(FB.classList.contains('show')) closeFind(); q('modal-overlay').classList.remove('show'); }
 });
+
+// ── Pinch-to-zoom → editor font size only ───────────────────────────────────
+// A trackpad pinch arrives as a wheel event with ctrlKey set. WebKitGTK would
+// otherwise zoom the entire page (chrome + layout). We swallow it everywhere and
+// redirect the gesture to the editor's font size, so only the note text scales.
+let pinchAccum = 0;
+const PINCH_STEP = 18; // accumulated wheel delta per 1px font change (tunable)
+document.addEventListener('wheel',e=>{
+  if(!e.ctrlKey) return;
+  e.preventDefault();
+  pinchAccum += e.deltaY;
+  while(pinchAccum <= -PINCH_STEP){ setFontSize(S.fontSize+1); pinchAccum += PINCH_STEP; }
+  while(pinchAccum >=  PINCH_STEP){ setFontSize(S.fontSize-1); pinchAccum -= PINCH_STEP; }
+},{passive:false});
 
 // ── Init (wait for Wails bindings, then hydrate) ────────────────────────────
 async function init(){
