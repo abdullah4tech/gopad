@@ -450,14 +450,11 @@ body.no-linenums #line-numbers{display:none}
       <div class="menu" data-menu="view">
         <button class="menu-btn">View</button>
         <div class="menu-pop">
-          <button class="menu-item" data-act="sidebar">Toggle sidebar<span class="menu-key">Ctrl+B</span></button>
           <button class="menu-item" data-act="wrap">Toggle word wrap</button>
           <button class="menu-item" data-act="linenums" id="mi-linenums">Hide line numbers</button>
           <div class="menu-div"></div>
-          <button class="menu-item" data-act="finc">Larger text<span class="menu-key">A+</span></button>
-          <button class="menu-item" data-act="fdec">Smaller text<span class="menu-key">A−</span></button>
-          <div class="menu-div"></div>
-          <button class="menu-item" data-act="theme">Toggle theme</button>
+          <button class="menu-item" data-act="finc">Zoom in<span class="menu-key">Ctrl +</span></button>
+          <button class="menu-item" data-act="fdec">Zoom out<span class="menu-key">Ctrl −</span></button>
         </div>
       </div>
       <div class="menu" data-menu="help">
@@ -1071,12 +1068,10 @@ const MENU_ACTIONS={
   undo:()=>{ if(UndoMgr.undo()){ updateLineNumbers(); updateStatus(); scheduleSave(); } },
   redo:()=>{ if(UndoMgr.redo()){ updateLineNumbers(); updateStatus(); scheduleSave(); } },
   find:openFind,
-  sidebar:toggleSidebar,
   wrap:toggleWrap,
   linenums:toggleLineNumbers,
   finc:()=>setFontSize(S.fontSize+1),
   fdec:()=>setFontSize(S.fontSize-1),
-  theme:toggleThemeAnimated,
   shortcuts:()=>showInfo('Keyboard shortcuts',SHORTCUTS_HTML),
   about:()=>showInfo('GoPad',ABOUT_HTML),
 };
