@@ -3,6 +3,8 @@
 #   sudo pacman -S webkit2gtk-4.1 gtk3 pkg-config gcc
 # Optional (live-reload dev mode): the Wails CLI
 #   go install github.com/wailsapp/wails/v2/cmd/wails@latest
+# Windows cross-compilation: mingw-w64-gcc
+#   sudo pacman -S mingw-w64-gcc
 
 BINARY      := gopad
 # Arch ships webkit2gtk-4.1; the webkit2_41 tag selects it over the legacy 4.0
@@ -13,24 +15,29 @@ BUILD_TAGS  := desktop,production,webkit2_41
 DEV_TAGS    := webkit2_41
 BUILD_FLAGS := CGO_ENABLED=1
 
-.PHONY: build run dev install deps clean
+.PHONY: build build-windows build-linux run dev install deps clean
 
 deps:
 	go mod tidy
 
-build:
+build-linux:
 	$(BUILD_FLAGS) go build -tags "$(BUILD_TAGS)" -ldflags "-s -w" -o $(BINARY) .
 
-run: build
+build-windows:
+	wails build -platform windows/amd64 -ldflags "-s -w" -o $(BINARY).exe
+
+build: build-linux
+
+run: build-linux
 	./$(BINARY)
 
 # Live-reload development (needs the Wails CLI, see above).
 dev:
 	wails dev -tags $(DEV_TAGS)
 
-install: build
+install: build-linux
 	install -Dm755 $(BINARY) $(HOME)/.local/bin/$(BINARY)
 	@echo "Installed to ~/.local/bin/$(BINARY)"
 
 clean:
-	rm -f $(BINARY)
+	rm -f $(BINARY) $(BINARY).exe
