@@ -63,7 +63,7 @@
 html,body{height:100%;overflow:hidden}
 body{
   background:var(--bg);color:var(--text);
-  font-family:var(--font-ui);font-size:13px;user-select:none;
+  font-family:var(--font-ui);font-size:13px;-webkit-user-select:none;user-select:none;
   -webkit-font-smoothing:antialiased;
 }
 
@@ -219,7 +219,7 @@ body{
 #search-inp{
   width:100%;background:var(--surface);border:1px solid var(--border);
   border-radius:8px;padding:7px 9px 7px 28px;color:var(--text);font-size:12px;
-  outline:none;transition:border-color .15s,box-shadow .15s;user-select:text;
+  outline:none;transition:border-color .15s,box-shadow .15s;-webkit-user-select:text;user-select:text;
   font-family:var(--font-ui);
 }
 #search-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
@@ -269,7 +269,7 @@ body{
   background:none;border:none;color:var(--text-bright);
   font-family:var(--font-ui);font-size:14px;font-weight:600;
   padding:5px 8px;border-radius:7px;flex:1;min-width:0;outline:none;
-  border:1px solid transparent;transition:border-color .15s,background .15s;user-select:text;
+  border:1px solid transparent;transition:border-color .15s,background .15s;-webkit-user-select:text;user-select:text;
 }
 #note-title:focus{border-color:var(--accent);background:var(--accent-soft)}
 #note-title::placeholder{color:var(--text-dim);font-weight:500}
@@ -328,7 +328,7 @@ body.no-linenums #line-numbers{display:none}
 #editor{
   flex:1;background:var(--bg);color:var(--text);resize:none;border:none;outline:none;
   font-family:var(--font-mono);font-size:var(--fs);line-height:var(--lh);
-  padding:16px 20px;tab-size:4;overflow:auto;user-select:text;caret-color:var(--caret);
+  padding:16px 20px;tab-size:4;overflow:auto;-webkit-user-select:text;user-select:text;caret-color:var(--caret);
   white-space:pre-wrap;word-wrap:break-word;
 }
 #editor::selection{background:var(--sel)}
@@ -342,7 +342,7 @@ body.no-linenums #line-numbers{display:none}
 .fi-label{color:var(--text-dim);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px}
 .fi{
   background:var(--surface);border:1px solid var(--border);border-radius:7px;
-  padding:5px 9px;color:var(--text);font-size:12px;outline:none;user-select:text;
+  padding:5px 9px;color:var(--text);font-size:12px;outline:none;-webkit-user-select:text;user-select:text;
   font-family:var(--font-mono);transition:border-color .15s,box-shadow .15s;
 }
 .fi:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
@@ -1081,6 +1081,18 @@ MENU.querySelectorAll('.menu-item').forEach(item=>{
 document.addEventListener('click',closeMenus);
 
 document.addEventListener('keydown',e=>{
+  // Ctrl+A must only select the note's own content. Other inputs (title, search,
+  // find/replace) keep native select-all *within themselves*; everywhere else
+  // (buttons, menus, window chrome) we redirect into the editor instead of
+  // letting the browser select-all the whole page.
+  if(e.ctrlKey && (e.key==='a'||e.key==='A')){
+    const tag=e.target.tagName;
+    if(tag!=='TEXTAREA' && tag!=='INPUT'){
+      e.preventDefault();
+      if(S.activeId){ ED.focus(); ED.select(); }
+    }
+    return;
+  }
   if(e.ctrlKey && e.key==='n'){ e.preventDefault(); newNote(); }
   if(e.ctrlKey && e.key==='o'){ e.preventDefault(); openFile(); }
   if(e.ctrlKey && e.key==='b'){ e.preventDefault(); toggleSidebar(); }
