@@ -70,6 +70,20 @@ func (a *App) DeleteNote(id int64) error {
 	return dbDeleteNote(a.db, id)
 }
 
+// ── Highlights ─────────────────────────────────────────────────────────────
+
+func (a *App) GetHighlights(noteId int64) ([]Highlight, error) {
+	return dbGetHighlights(a.db, noteId)
+}
+
+func (a *App) AddHighlight(noteId int64, selText, color, comment string, offStart int64) (*Highlight, error) {
+	return dbAddHighlight(a.db, noteId, selText, color, comment, offStart)
+}
+
+func (a *App) DeleteHighlight(id int64) error {
+	return dbDeleteHighlight(a.db, id)
+}
+
 // ── Settings ───────────────────────────────────────────────────────────────
 
 func (a *App) GetSetting(key string) (string, error) {
