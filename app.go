@@ -54,6 +54,10 @@ func (a *App) ListNotes() ([]Note, error) {
 	return dbListNotes(a.db)
 }
 
+func (a *App) ListArchivedNotes() ([]Note, error) {
+	return dbListArchivedNotes(a.db)
+}
+
 func (a *App) GetNote(id int64) (*Note, error) {
 	return dbGetNote(a.db, id)
 }
@@ -68,6 +72,14 @@ func (a *App) UpdateNote(id int64, title, content string) error {
 
 func (a *App) DeleteNote(id int64) error {
 	return dbDeleteNote(a.db, id)
+}
+
+func (a *App) ArchiveNote(id int64) error {
+	return dbSetArchived(a.db, id, true)
+}
+
+func (a *App) RestoreNote(id int64) error {
+	return dbSetArchived(a.db, id, false)
 }
 
 // ── Highlights ─────────────────────────────────────────────────────────────
