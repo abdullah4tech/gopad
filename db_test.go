@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -45,7 +46,40 @@ func TestArchiveFiltersNotes(t *testing.T) {
 	}
 }
 
-func TestInitDBMigratesArchivedColumn(t *testing.T) {
+func TestLockPreventsNoteUpdates(t *testing.T) {
+	db, err := initDB(filepath.Join(t.TempDir(), "notes.db"))
+	if err != nil {
+		t.Fatalf("initDB: %v", err)
+	}
+	defer db.Close()
+
+	note, err := dbCreateNote(db)
+	if err != nil {
+		t.Fatalf("create note: %v", err)
+	}
+	if err := dbSetLocked(db, note.ID, true); err != nil {
+		t.Fatalf("lock note: %v", err)
+	}
+	if err := dbUpdateNote(db, note.ID, "Locked title", "Locked content"); !errors.Is(err, errNoteLocked) {
+		t.Fatalf("update locked note error = %v, want %v", err, errNoteLocked)
+	}
+	locked, err := dbGetNote(db, note.ID)
+	if err != nil {
+		t.Fatalf("get locked note: %v", err)
+	}
+	if locked.Title == "Locked title" || locked.Content == "Locked content" {
+		t.Fatalf("locked note was updated: %#v", locked)
+	}
+
+	if err := dbSetLocked(db, note.ID, false); err != nil {
+		t.Fatalf("unlock note: %v", err)
+	}
+	if err := dbUpdateNote(db, note.ID, "Unlocked title", "Unlocked content"); err != nil {
+		t.Fatalf("update unlocked note: %v", err)
+	}
+}
+
+func TestInitDBMigratesNoteStateColumns(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "old-notes.db")
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
@@ -92,7 +126,7 @@ func TestInitDBMigratesArchivedColumn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list migrated notes: %v", err)
 	}
-	if len(notes) != 1 || notes[0].Archived {
-		t.Fatalf("migrated notes = %#v, want one active note", notes)
+	if len(notes) != 1 || notes[0].Archived || notes[0].Locked {
+		t.Fatalf("migrated notes = %#v, want one active unlocked note", notes)
 	}
 }

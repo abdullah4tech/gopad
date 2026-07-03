@@ -53,6 +53,7 @@ The UI is HTML/CSS/JS rendered by **WebKitGTK** (the same engine behind GNOME We
 | **Durability** | Every keystroke auto-saves to SQLite within 900 ms; WAL mode + 5 s busy-timeout prevents write contention |
 | **Multi-note** | Unlimited notes; sidebar sorted by last-modified descending |
 | **Archive** | Archive notes out of the main list without deleting them; restore them from the Archive view |
+| **Locking** | Lock notes to make title, content, and highlights read-only until unlocked |
 | **Search** | Live full-text sidebar search across title and content |
 | **Find & Replace** | In-editor search with match counter (`3/17`), cycle prev/next, replace one or all |
 | **File I/O** | Open any text/code file from disk; export/save back via the native Wails file dialog |
@@ -179,7 +180,8 @@ CREATE TABLE notes (
     file_path  TEXT NOT NULL DEFAULT '',  -- empty if never exported
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    archived   INTEGER NOT NULL DEFAULT 0
+    archived   INTEGER NOT NULL DEFAULT 0,
+    locked     INTEGER NOT NULL DEFAULT 0
 );
 
 -- Persisted UI preferences
@@ -273,6 +275,8 @@ Each exported `App` method is bound by Wails as `window.go.main.App.<Method>()`,
 | `App.DeleteNote(id)` | `dbDeleteNote` | Hard delete |
 | `App.ArchiveNote(id)` | `dbSetArchived` | Move a note out of the main list |
 | `App.RestoreNote(id)` | `dbSetArchived` | Restore an archived note to the main list |
+| `App.LockNote(id)` | `dbSetLocked` | Make a note read-only |
+| `App.UnlockNote(id)` | `dbSetLocked` | Allow edits to a locked note |
 | `App.SaveToFile(id)` | Wails dialog → `os.WriteFile` | Export content to a user-chosen path |
 | `App.OpenFile()` | Wails dialog → `os.ReadFile` | Import file into a new note |
 | `App.GetSetting(key)` | `dbGetSetting` | Read one setting value |

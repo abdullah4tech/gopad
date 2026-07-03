@@ -265,6 +265,7 @@ body{
 .ni:hover .ni-act{opacity:1}
 .ni-act:hover{color:var(--accent);background:var(--accent-soft)}
 .ni-act.danger:hover{color:var(--danger);background:rgba(229,87,63,.12)}
+.ni-act.locked{opacity:1;color:var(--accent)}
 .ni-act .ic{width:14px;height:14px}
 .sb-empty{padding:18px 10px;color:var(--text-dim);font-size:12px;text-align:center;line-height:1.6}
 
@@ -282,6 +283,7 @@ body{
   border:1px solid transparent;transition:border-color .15s,background .15s;-webkit-user-select:text;user-select:text;
 }
 #note-title:focus{border-color:var(--accent);background:var(--accent-soft)}
+#note-title.locked{color:var(--text-dim)}
 #note-title::placeholder{color:var(--text-dim);font-weight:500}
 .tb-sep{width:1px;height:20px;background:var(--border);margin:0 5px;flex-shrink:0}
 .tb-btn{
@@ -343,6 +345,7 @@ body.no-linenums #line-numbers{display:none}
   white-space:pre-wrap;word-wrap:break-word;
 }
 #editor::selection{background:var(--sel)}
+#editor.locked{color:var(--text-dim)}
 /* ── Find bar ─────────────────────────────────────────────────────────────*/
 #find-bar{
   background:var(--bg-bar);border-top:1px solid var(--border);
@@ -550,6 +553,7 @@ mark.hl-orange{background:rgba(255,150,50,.30)}
           <button class="menu-item" data-act="export">Export to file…<span class="menu-key">Ctrl+S</span></button>
           <div class="menu-div"></div>
           <button class="menu-item" data-act="archive" id="mi-archive">Archive note</button>
+          <button class="menu-item" data-act="lock" id="mi-lock">Lock note</button>
           <button class="menu-item danger" data-act="delete">Delete note</button>
         </div>
       </div>
@@ -791,6 +795,7 @@ const DEFAULT_FONT = 14;
 const S = {
   notes:[], activeId:null, saveTimer:null,
   view:'notes',
+  activeLocked:false,
   fontSize:DEFAULT_FONT, wordWrap:true, theme:'dark', sbCollapsed:false, lineNums:true,
   findMatches:[], findIdx:0, confirmCb:null,
 };
@@ -888,6 +893,7 @@ function renderList(filter=''){
   q('tab-notes').setAttribute('aria-selected',S.view==='notes'?'true':'false');
   q('tab-archive').setAttribute('aria-selected',S.view==='archive'?'true':'false');
   q('mi-archive').textContent=S.view==='archive'?'Restore note':'Archive note';
+  q('mi-lock').textContent=S.activeLocked?'Unlock note':'Lock note';
 
   if(!visible.length){
     const empty=S.view==='archive'?'Archive is empty.':'No notes yet.<br>Press Ctrl+N to start.';
@@ -901,9 +907,12 @@ function renderList(filter=''){
     el.innerHTML=`
       <div class="ni-info">
         <div class="ni-title">${esc(n.title||'Untitled')}</div>
-        <div class="ni-date">${fmtDate(n.updated_at)}</div>
+        <div class="ni-date">${fmtDate(n.updated_at)}${n.locked?' · Locked':''}</div>
       </div>
       <div class="ni-actions">
+        <button class="ni-act${n.locked?' locked':''}" data-act="lock" data-id="${n.id}" title="${n.locked?'Unlock':'Lock'}">
+          <span class="ic" style="--i:url(assets/icons/lock.svg)"></span>
+        </button>
         <button class="ni-act" data-act="archive" data-id="${n.id}" title="${S.view==='archive'?'Restore':'Archive'}">
           <span class="ic" style="--i:url(assets/icons/archive.svg)"></span>
         </button>
@@ -912,6 +921,7 @@ function renderList(filter=''){
         </button>
       </div>`;
     el.addEventListener('click',e=>{ if(!e.target.closest('.ni-actions')) openNote(n.id); });
+    el.querySelector('[data-act="lock"]').addEventListener('click',e=>{ e.stopPropagation(); toggleLock(n.id); });
     el.querySelector('[data-act="archive"]').addEventListener('click',e=>{ e.stopPropagation(); toggleArchive(n.id); });
     el.querySelector('[data-act="delete"]').addEventListener('click',e=>{ e.stopPropagation(); confirmDelete(n.id,n.title); });
     nl.appendChild(el);
@@ -926,6 +936,7 @@ async function openNote(id){
   S.activeId=id;
   q('note-title').value=n.title||'';
   ED.value=n.content||'';
+  setLockedState(!!n.locked);
   UndoMgr.init();
   updateLineNumbers(); updateStatus(); updateFileTag(n.file_path);
   hbSafe();
@@ -936,8 +947,24 @@ async function openNote(id){
   document.querySelectorAll('.ni').forEach(el=>el.classList.toggle('active',parseInt(el.dataset.id)===id));
 }
 
+function setLockedState(locked){
+  S.activeLocked=locked;
+  q('note-title').readOnly=locked;
+  ED.readOnly=locked;
+  q('note-title').classList.toggle('locked',locked);
+  ED.classList.toggle('locked',locked);
+  const mi=q('mi-lock'); if(mi) mi.textContent=locked?'Unlock note':'Lock note';
+}
+
+function canEditActive(){
+  if(!S.activeLocked) return true;
+  toast('Note is locked');
+  return false;
+}
+
 function closeActiveNote(){
   S.activeId=null;
+  setLockedState(false);
   q('note-title').value=''; ED.value='';
   S.highlights=[]; renderHlOverlay(); renderHlPanel();
   updateLineNumbers(); updateStatus(); updateFileTag('');
@@ -995,6 +1022,31 @@ async function toggleArchive(id=S.activeId){
   toast(restoring?'Note restored':'Note archived');
 }
 
+async function toggleLock(id=S.activeId){
+  if(!id){ toast('No note selected'); return; }
+  if(id===S.activeId){
+    clearTimeout(S.saveTimer);
+    await flushSave();
+  }
+  const idx=S.notes.findIndex(n=>n.id===id);
+  const note=idx>=0 ? S.notes[idx] : null;
+  const locking=!(id===S.activeId ? S.activeLocked : !!note?.locked);
+  try{
+    if(locking) await App().LockNote(id);
+    else await App().UnlockNote(id);
+  }catch(e){
+    toast(locking?'Lock failed':'Unlock failed');
+    return;
+  }
+  if(note){
+    note.locked=locking;
+    note.updated_at=new Date().toISOString();
+  }
+  if(id===S.activeId) setLockedState(locking);
+  renderList(q('search-inp').value);
+  toast(locking?'Note locked':'Note unlocked');
+}
+
 async function setView(view){
   if(S.view===view) return;
   clearTimeout(S.saveTimer);
@@ -1010,6 +1062,7 @@ function scheduleSave(){ clearTimeout(S.saveTimer); hbWriting(); S.saveTimer=set
 
 async function flushSave(){
   if(!S.activeId) return;
+  if(S.activeLocked){ hbSafe(); return; }
   const title=q('note-title').value.trim()||'Untitled';
   const content=ED.value;
   try{
@@ -1237,6 +1290,7 @@ function toggleHlPanel(){
 // Picker
 function openHlPicker(){
   if(!S.activeId) return;
+  if(!canEditActive()) return;
   const s = ED.selectionStart, e = ED.selectionEnd;
   if(s === e){ toast('Select some text first'); return; }
   S.hlSel0 = s; S.hlSel1 = e;
@@ -1249,6 +1303,7 @@ function openHlPicker(){
 function closeHlPicker(){ q('hl-picker').classList.remove('show'); ED.focus(); }
 
 async function saveHl(){
+  if(!canEditActive()){ closeHlPicker(); return; }
   const text = ED.value.substring(S.hlSel0, S.hlSel1);
   if(!text){ closeHlPicker(); return; }
   const comment = q('hl-comment-inp').value.trim();
@@ -1259,6 +1314,7 @@ async function saveHl(){
 }
 
 async function deleteHl(id){
+  if(!canEditActive()) return;
   try{
     await App().DeleteHighlight(id);
     S.highlights = S.highlights.filter(h=>h.id!==id);
@@ -1306,10 +1362,10 @@ const CTX = q('ctx-menu');
 
 function showCtxMenu(x, y, hasSel){
   q('ctx-copy').disabled = !hasSel;
-  q('ctx-cut').disabled  = !hasSel;
+  q('ctx-cut').disabled  = !hasSel || S.activeLocked;
   const hlBtn = q('ctx-hl'), sep = q('ctx-sep-hl');
-  hlBtn.style.display = hasSel ? '' : 'none';
-  sep.style.display   = hasSel ? '' : 'none';
+  hlBtn.style.display = hasSel && !S.activeLocked ? '' : 'none';
+  sep.style.display   = hasSel && !S.activeLocked ? '' : 'none';
   CTX.style.left = x+'px'; CTX.style.top = y+'px';
   CTX.classList.add('show');
   requestAnimationFrame(()=>{
@@ -1334,10 +1390,12 @@ CTX.addEventListener('click', e=>{
       ED.focus(); ED.setSelectionRange(ctxSel0, ctxSel1);
       document.execCommand('copy'); break;
     case 'cut':
+      if(!canEditActive()) break;
       ED.focus(); ED.setSelectionRange(ctxSel0, ctxSel1);
       document.execCommand('cut');
       UndoMgr.record(); updateLineNumbers(); updateStatus(); scheduleSave(); renderHlOverlay(); break;
     case 'paste':
+      if(!canEditActive()) break;
       ED.focus(); ED.setSelectionRange(ctxSel0, ctxSel1);
       document.execCommand('paste'); break;
     case 'highlight':
@@ -1347,10 +1405,11 @@ CTX.addEventListener('click', e=>{
 });
 
 ED.addEventListener('keydown',e=>{
-  if(e.ctrlKey && (e.key==='z'||e.key==='Z') && !e.shiftKey){ e.preventDefault(); if(UndoMgr.undo()){ updateLineNumbers(); updateStatus(); scheduleSave(); } return; }
-  if((e.ctrlKey&&e.shiftKey&&(e.key==='z'||e.key==='Z'))||(e.ctrlKey&&(e.key==='y'||e.key==='Y'))){ e.preventDefault(); if(UndoMgr.redo()){ updateLineNumbers(); updateStatus(); scheduleSave(); } return; }
+  if(e.ctrlKey && (e.key==='z'||e.key==='Z') && !e.shiftKey){ e.preventDefault(); if(canEditActive() && UndoMgr.undo()){ updateLineNumbers(); updateStatus(); scheduleSave(); } return; }
+  if((e.ctrlKey&&e.shiftKey&&(e.key==='z'||e.key==='Z'))||(e.ctrlKey&&(e.key==='y'||e.key==='Y'))){ e.preventDefault(); if(canEditActive() && UndoMgr.redo()){ updateLineNumbers(); updateStatus(); scheduleSave(); } return; }
   if(e.key==='Tab'){
     e.preventDefault();
+    if(!canEditActive()) return;
     const s=ED.selectionStart, en=ED.selectionEnd;
     ED.value=ED.value.substring(0,s)+'    '+ED.value.substring(en);
     ED.selectionStart=ED.selectionEnd=s+4;
@@ -1383,12 +1442,14 @@ function highlightMatch(){
 function findNext(){ if(!S.findMatches.length) return; S.findIdx=(S.findIdx+1)%S.findMatches.length; updateFindCount(); highlightMatch(); }
 function findPrev(){ if(!S.findMatches.length) return; S.findIdx=(S.findIdx-1+S.findMatches.length)%S.findMatches.length; updateFindCount(); highlightMatch(); }
 function replaceOne(){
+  if(!canEditActive()) return;
   if(!S.findMatches.length) return;
   const pos=S.findMatches[S.findIdx], needle=q('fi-query').value, rep=q('fi-replace').value;
   ED.value=ED.value.substring(0,pos)+rep+ED.value.substring(pos+needle.length);
   UndoMgr.record(); updateLineNumbers(); updateStatus(); scheduleSave(); doFind();
 }
 function replaceAll(){
+  if(!canEditActive()) return;
   const needle=q('fi-query').value; if(!needle) return;
   const rep=q('fi-replace').value, cnt=S.findMatches.length;
   ED.value=ED.value.split(new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi')).join(rep);
@@ -1534,9 +1595,10 @@ const MENU_ACTIONS={
   open:openFile,
   export:()=>{ clearTimeout(S.saveTimer); flushSave().then(saveToFile); },
   archive:()=>toggleArchive(),
+  lock:()=>toggleLock(),
   delete:()=>{ if(!S.activeId){ toast('No note selected'); return; } const n=S.notes.find(x=>x.id===S.activeId); confirmDelete(S.activeId,n?.title); },
-  undo:()=>{ if(UndoMgr.undo()){ updateLineNumbers(); updateStatus(); scheduleSave(); } },
-  redo:()=>{ if(UndoMgr.redo()){ updateLineNumbers(); updateStatus(); scheduleSave(); } },
+  undo:()=>{ if(canEditActive() && UndoMgr.undo()){ updateLineNumbers(); updateStatus(); scheduleSave(); } },
+  redo:()=>{ if(canEditActive() && UndoMgr.redo()){ updateLineNumbers(); updateStatus(); scheduleSave(); } },
   find:openFind,
   wrap:toggleWrap,
   linenums:toggleLineNumbers,
