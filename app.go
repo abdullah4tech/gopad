@@ -82,6 +82,14 @@ func (a *App) RestoreNote(id int64) error {
 	return dbSetArchived(a.db, id, false)
 }
 
+func (a *App) LockNote(id int64) error {
+	return dbSetLocked(a.db, id, true)
+}
+
+func (a *App) UnlockNote(id int64) error {
+	return dbSetLocked(a.db, id, false)
+}
+
 // ── Highlights ─────────────────────────────────────────────────────────────
 
 func (a *App) GetHighlights(noteId int64) ([]Highlight, error) {

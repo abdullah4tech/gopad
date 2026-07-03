@@ -2,10 +2,13 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+var errNoteLocked = errors.New("note is locked")
 
 type Note struct {
 	ID        int64  `json:"id"`
@@ -15,6 +18,7 @@ type Note struct {
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 	Archived  bool   `json:"archived"`
+	Locked    bool   `json:"locked"`
 }
 
 type Highlight struct {
@@ -40,7 +44,8 @@ func initDB(path string) (*sql.DB, error) {
 			file_path  TEXT    NOT NULL DEFAULT '',
 			created_at TEXT    NOT NULL,
 			updated_at TEXT    NOT NULL,
-			archived   INTEGER NOT NULL DEFAULT 0
+			archived   INTEGER NOT NULL DEFAULT 0,
+			locked     INTEGER NOT NULL DEFAULT 0
 		);
 		CREATE TABLE IF NOT EXISTS settings (
 			key   TEXT PRIMARY KEY,
@@ -75,7 +80,7 @@ func dbListArchivedNotes(db *sql.DB) ([]Note, error) {
 
 func dbListNotesByArchive(db *sql.DB, archived bool) ([]Note, error) {
 	rows, err := db.Query(
-		`SELECT id, title, content, file_path, created_at, updated_at, archived
+		`SELECT id, title, content, file_path, created_at, updated_at, archived, locked
 		 FROM notes WHERE archived = ? ORDER BY updated_at DESC`, archived)
 	if err != nil {
 		return nil, err
@@ -84,7 +89,7 @@ func dbListNotesByArchive(db *sql.DB, archived bool) ([]Note, error) {
 	var notes []Note
 	for rows.Next() {
 		var n Note
-		if err := rows.Scan(&n.ID, &n.Title, &n.Content, &n.FilePath, &n.CreatedAt, &n.UpdatedAt, &n.Archived); err != nil {
+		if err := rows.Scan(&n.ID, &n.Title, &n.Content, &n.FilePath, &n.CreatedAt, &n.UpdatedAt, &n.Archived, &n.Locked); err != nil {
 			return nil, err
 		}
 		notes = append(notes, n)
@@ -98,8 +103,8 @@ func dbListNotesByArchive(db *sql.DB, archived bool) ([]Note, error) {
 func dbGetNote(db *sql.DB, id int64) (*Note, error) {
 	var n Note
 	err := db.QueryRow(
-		`SELECT id, title, content, file_path, created_at, updated_at, archived FROM notes WHERE id = ?`, id,
-	).Scan(&n.ID, &n.Title, &n.Content, &n.FilePath, &n.CreatedAt, &n.UpdatedAt, &n.Archived)
+		`SELECT id, title, content, file_path, created_at, updated_at, archived, locked FROM notes WHERE id = ?`, id,
+	).Scan(&n.ID, &n.Title, &n.Content, &n.FilePath, &n.CreatedAt, &n.UpdatedAt, &n.Archived, &n.Locked)
 	return &n, err
 }
 
@@ -118,10 +123,24 @@ func dbCreateNote(db *sql.DB) (*Note, error) {
 
 func dbUpdateNote(db *sql.DB, id int64, title, content string) error {
 	now := time.Now().Format(time.RFC3339)
-	_, err := db.Exec(
-		`UPDATE notes SET title = ?, content = ?, updated_at = ? WHERE id = ?`,
+	res, err := db.Exec(
+		`UPDATE notes SET title = ?, content = ?, updated_at = ? WHERE id = ? AND locked = 0`,
 		title, content, now, id,
 	)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil || affected > 0 {
+		return err
+	}
+	note, err := dbGetNote(db, id)
+	if err != nil {
+		return err
+	}
+	if note.Locked {
+		return errNoteLocked
+	}
 	return err
 }
 
@@ -138,6 +157,12 @@ func dbDeleteNote(db *sql.DB, id int64) error {
 func dbSetArchived(db *sql.DB, id int64, archived bool) error {
 	now := time.Now().Format(time.RFC3339)
 	_, err := db.Exec(`UPDATE notes SET archived = ?, updated_at = ? WHERE id = ?`, archived, now, id)
+	return err
+}
+
+func dbSetLocked(db *sql.DB, id int64, locked bool) error {
+	now := time.Now().Format(time.RFC3339)
+	_, err := db.Exec(`UPDATE notes SET locked = ?, updated_at = ? WHERE id = ?`, locked, now, id)
 	return err
 }
 
@@ -165,6 +190,11 @@ func migrateDB(db *sql.DB) error {
 	}
 	if !columns["archived"] {
 		if _, err := db.Exec(`ALTER TABLE notes ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	if !columns["locked"] {
+		if _, err := db.Exec(`ALTER TABLE notes ADD COLUMN locked INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
 	}
