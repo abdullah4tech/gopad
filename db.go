@@ -14,6 +14,7 @@ type Note struct {
 	FilePath  string `json:"file_path"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
+	Archived  bool   `json:"archived"`
 }
 
 type Highlight struct {
@@ -38,7 +39,8 @@ func initDB(path string) (*sql.DB, error) {
 			content    TEXT    NOT NULL DEFAULT '',
 			file_path  TEXT    NOT NULL DEFAULT '',
 			created_at TEXT    NOT NULL,
-			updated_at TEXT    NOT NULL
+			updated_at TEXT    NOT NULL,
+			archived   INTEGER NOT NULL DEFAULT 0
 		);
 		CREATE TABLE IF NOT EXISTS settings (
 			key   TEXT PRIMARY KEY,
@@ -54,13 +56,27 @@ func initDB(path string) (*sql.DB, error) {
 			created_at TEXT    NOT NULL
 		);
 	`)
-	return db, err
+	if err != nil {
+		return nil, err
+	}
+	if err := migrateDB(db); err != nil {
+		return nil, err
+	}
+	return db, nil
 }
 
 func dbListNotes(db *sql.DB) ([]Note, error) {
+	return dbListNotesByArchive(db, false)
+}
+
+func dbListArchivedNotes(db *sql.DB) ([]Note, error) {
+	return dbListNotesByArchive(db, true)
+}
+
+func dbListNotesByArchive(db *sql.DB, archived bool) ([]Note, error) {
 	rows, err := db.Query(
-		`SELECT id, title, content, file_path, created_at, updated_at
-		 FROM notes ORDER BY updated_at DESC`)
+		`SELECT id, title, content, file_path, created_at, updated_at, archived
+		 FROM notes WHERE archived = ? ORDER BY updated_at DESC`, archived)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +84,7 @@ func dbListNotes(db *sql.DB) ([]Note, error) {
 	var notes []Note
 	for rows.Next() {
 		var n Note
-		if err := rows.Scan(&n.ID, &n.Title, &n.Content, &n.FilePath, &n.CreatedAt, &n.UpdatedAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.Title, &n.Content, &n.FilePath, &n.CreatedAt, &n.UpdatedAt, &n.Archived); err != nil {
 			return nil, err
 		}
 		notes = append(notes, n)
@@ -82,8 +98,8 @@ func dbListNotes(db *sql.DB) ([]Note, error) {
 func dbGetNote(db *sql.DB, id int64) (*Note, error) {
 	var n Note
 	err := db.QueryRow(
-		`SELECT id, title, content, file_path, created_at, updated_at FROM notes WHERE id = ?`, id,
-	).Scan(&n.ID, &n.Title, &n.Content, &n.FilePath, &n.CreatedAt, &n.UpdatedAt)
+		`SELECT id, title, content, file_path, created_at, updated_at, archived FROM notes WHERE id = ?`, id,
+	).Scan(&n.ID, &n.Title, &n.Content, &n.FilePath, &n.CreatedAt, &n.UpdatedAt, &n.Archived)
 	return &n, err
 }
 
@@ -117,6 +133,42 @@ func dbSetFilePath(db *sql.DB, id int64, filePath string) error {
 func dbDeleteNote(db *sql.DB, id int64) error {
 	_, err := db.Exec(`DELETE FROM notes WHERE id = ?`, id)
 	return err
+}
+
+func dbSetArchived(db *sql.DB, id int64, archived bool) error {
+	now := time.Now().Format(time.RFC3339)
+	_, err := db.Exec(`UPDATE notes SET archived = ?, updated_at = ? WHERE id = ?`, archived, now, id)
+	return err
+}
+
+func migrateDB(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(notes)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var dfltValue any
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dfltValue, &pk); err != nil {
+			return err
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if !columns["archived"] {
+		if _, err := db.Exec(`ALTER TABLE notes ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func dbGetHighlights(db *sql.DB, noteId int64) ([]Highlight, error) {
