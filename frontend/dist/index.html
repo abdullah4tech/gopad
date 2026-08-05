@@ -426,6 +426,69 @@ body.no-linenums #line-numbers{display:none}
 .btn-ghost:hover{background:var(--hover)}
 .btn-danger{background:var(--danger);color:#fff}
 .btn-danger:hover{filter:brightness(1.1)}
+.btn-accent{background:var(--accent);color:#0f1419;border:none}
+.btn-accent:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.5;cursor:default;pointer-events:none}
+
+/* ── Passphrase dialog ────────────────────────────────────────────────────*/
+#pass-overlay,#upd-overlay{
+  position:fixed;inset:0;background:rgba(7,10,13,.6);backdrop-filter:blur(2px);
+  display:none;align-items:center;justify-content:center;z-index:1300;
+}
+#pass-overlay.show,#upd-overlay.show{display:flex;animation:fadein .12s ease forwards}
+.pass-inp{
+  width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  color:var(--text);font-family:var(--font-mono);font-size:13px;
+  padding:9px 12px;outline:none;margin-bottom:9px;
+  transition:border-color .15s,box-shadow .15s;
+  -webkit-user-select:text;user-select:text;
+}
+.pass-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.pass-inp::placeholder{color:var(--text-dim);font-family:var(--font-ui)}
+#pass-warn{
+  font-size:11.5px;color:var(--text-dim);line-height:1.55;margin:2px 0 16px;
+  padding-left:9px;border-left:2px solid var(--danger);
+}
+#pass-err{color:var(--danger);font-size:12px;min-height:16px;margin-bottom:10px}
+
+/* ── Locked note panel ────────────────────────────────────────────────────*/
+#lock-state{
+  flex:1;display:none;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;color:var(--text-dim);padding:24px;text-align:center;
+}
+#lock-state.show{display:flex;animation:fadein .16s ease}
+#lock-state .ic{width:44px;height:44px;opacity:.45;margin-bottom:10px;background-color:var(--accent)}
+#lock-state h2{color:var(--text);font-size:16px;font-weight:600}
+#lock-state p{font-size:13px;max-width:300px;line-height:1.6}
+
+/* ── Update pill ──────────────────────────────────────────────────────────*/
+#update-pill{
+  display:none;align-items:center;gap:6px;margin-right:6px;
+  background:var(--accent-soft);color:var(--accent);border:1px solid transparent;
+  border-radius:999px;padding:4px 11px 4px 9px;cursor:pointer;
+  font-family:var(--font-ui);font-size:11.5px;font-weight:600;
+  transition:filter .13s,transform .1s;
+}
+#update-pill.show{display:flex;animation:pillin .25s ease}
+#update-pill:hover{filter:brightness(1.15)}
+#update-pill:active{transform:scale(.95)}
+@keyframes pillin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+#update-pill .dot{
+  width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;
+  animation:pilldot 2s ease-in-out infinite;
+}
+@keyframes pilldot{0%,100%{opacity:1}50%{opacity:.35}}
+#upd-notes{
+  max-height:190px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);
+  border-radius:8px;padding:11px 13px;margin-bottom:16px;
+  font-size:12px;line-height:1.65;color:var(--text-dim);white-space:pre-wrap;
+  -webkit-user-select:text;user-select:text;
+}
+#upd-progress{display:none;margin-bottom:16px}
+#upd-progress.show{display:block}
+#upd-track{height:5px;background:var(--bg);border-radius:3px;overflow:hidden}
+#upd-fill{height:100%;width:0;background:var(--accent);border-radius:3px;transition:width .18s ease}
+#upd-pct{font-size:11px;color:var(--text-dim);margin-top:7px;font-family:var(--font-mono)}
 
 @media (prefers-reduced-motion: reduce){
   *{animation:none!important;transition:none!important}
@@ -553,7 +616,7 @@ mark.hl-orange{background:rgba(255,150,50,.30)}
           <button class="menu-item" data-act="export">Export to file…<span class="menu-key">Ctrl+S</span></button>
           <div class="menu-div"></div>
           <button class="menu-item" data-act="archive" id="mi-archive">Archive note</button>
-          <button class="menu-item" data-act="lock" id="mi-lock">Lock note</button>
+          <button class="menu-item" data-act="lock" id="mi-lock">Lock note…</button>
           <button class="menu-item danger" data-act="delete">Delete note</button>
         </div>
       </div>
@@ -580,6 +643,7 @@ mark.hl-orange{background:rgba(255,150,50,.30)}
         <button class="menu-btn">Help</button>
         <div class="menu-pop">
           <button class="menu-item" data-act="shortcuts">Keyboard shortcuts</button>
+          <button class="menu-item" data-act="updates">Check for updates…</button>
           <button class="menu-item" data-act="about">About GoPad</button>
         </div>
       </div>
@@ -587,6 +651,9 @@ mark.hl-orange{background:rgba(255,150,50,.30)}
 
     <!-- Quick-access bar -->
     <div class="qbar" id="qbar">
+      <button id="update-pill" title="A new version of GoPad is ready to install">
+        <span class="dot"></span><span id="update-pill-label">Update available</span>
+      </button>
       <button class="theme-btn" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">
         <svg viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
           <g class="tb-halves">
@@ -666,6 +733,13 @@ mark.hl-orange{background:rgba(255,150,50,.30)}
           <button class="btn-new-empty" id="btn-new-empty">New note</button>
         </div>
 
+        <div id="lock-state">
+          <span class="ic" style="--i:url(assets/icons/lock.svg)"></span>
+          <h2>This note is locked</h2>
+          <p>Its contents are encrypted on disk. Enter the passphrase to read or edit it.</p>
+          <button class="btn-new-empty" id="btn-reveal">Enter passphrase</button>
+        </div>
+
         <div id="editor-pane">
           <div id="line-numbers">1</div>
           <div id="editor-text-wrap">
@@ -741,6 +815,39 @@ mark.hl-orange{background:rgba(255,150,50,.30)}
   </div>
 </div>
 
+<!-- Passphrase dialog (set on lock / enter on reveal) -->
+<div id="pass-overlay">
+  <div class="modal">
+    <h3 id="pass-title">Lock note</h3>
+    <p id="pass-msg">Choose a passphrase. The note's contents are encrypted with it.</p>
+    <input type="password" class="pass-inp" id="pass-inp" placeholder="Passphrase" autocomplete="off"/>
+    <input type="password" class="pass-inp" id="pass-inp2" placeholder="Confirm passphrase" autocomplete="off"/>
+    <div id="pass-warn">There is no recovery. If you forget this passphrase, the note's contents are gone for good.</div>
+    <div id="pass-err"></div>
+    <div class="modal-acts">
+      <button class="btn btn-ghost" id="pass-cancel">Cancel</button>
+      <button class="btn btn-accent" id="pass-ok">Lock note</button>
+    </div>
+  </div>
+</div>
+
+<!-- Update dialog -->
+<div id="upd-overlay">
+  <div class="modal">
+    <h3 id="upd-title">Update available</h3>
+    <p id="upd-msg">GoPad v1.3.0 is available.</p>
+    <div id="upd-notes"></div>
+    <div id="upd-progress">
+      <div id="upd-track"><div id="upd-fill"></div></div>
+      <div id="upd-pct">Starting…</div>
+    </div>
+    <div class="modal-acts">
+      <button class="btn btn-ghost" id="upd-later">Later</button>
+      <button class="btn btn-accent" id="upd-install">Install &amp; restart</button>
+    </div>
+  </div>
+</div>
+
 <!-- Context menu -->
 <div id="ctx-menu">
   <button class="ctx-item" id="ctx-copy" data-act="copy">
@@ -795,7 +902,9 @@ const DEFAULT_FONT = 14;
 const S = {
   notes:[], activeId:null, saveTimer:null,
   view:'notes',
-  activeLocked:false,
+  // activeLocked: the note is encrypted. activeRevealed: we hold its key for as
+  // long as it stays the open note — switching away drops it (backend-side too).
+  activeLocked:false, activeRevealed:false,
   fontSize:DEFAULT_FONT, wordWrap:true, theme:'dark', sbCollapsed:false, lineNums:true,
   findMatches:[], findIdx:0, confirmCb:null,
 };
@@ -863,6 +972,47 @@ function showInfo(title,html){
 q('modal-ok').addEventListener('click',()=>{ q('modal-overlay').classList.remove('show'); if(S.confirmCb) S.confirmCb(); S.confirmCb=null; });
 q('modal-cancel').addEventListener('click',()=>{ q('modal-overlay').classList.remove('show'); S.confirmCb=null; });
 
+// ── Passphrase dialog ───────────────────────────────────────────────────────
+// askPassphrase({confirm}) resolves with the typed passphrase, or null if the
+// user backed out. The submit handler may return an error string to keep the
+// dialog open and show it (that's how a wrong passphrase is reported).
+let passSubmit=null;
+function askPassphrase({title,msg,okLabel,confirm=false,warn=false,onSubmit}){
+  q('pass-title').textContent=title;
+  q('pass-msg').textContent=msg;
+  q('pass-ok').textContent=okLabel;
+  q('pass-inp').value=''; q('pass-inp2').value='';
+  q('pass-inp2').style.display=confirm?'':'none';
+  q('pass-warn').style.display=warn?'':'none';
+  q('pass-err').textContent='';
+  passSubmit=onSubmit;
+  q('pass-overlay').classList.add('show');
+  setTimeout(()=>q('pass-inp').focus(),40);
+}
+function closePassphrase(){ q('pass-overlay').classList.remove('show'); passSubmit=null; q('pass-inp').value=''; q('pass-inp2').value=''; }
+function passError(msg){ q('pass-err').textContent=msg; }
+
+async function submitPassphrase(){
+  if(!passSubmit) return;
+  const pass=q('pass-inp').value;
+  if(!pass){ passError('Enter a passphrase'); return; }
+  if(q('pass-inp2').style.display!=='none' && pass!==q('pass-inp2').value){
+    passError('Passphrases don’t match'); return;
+  }
+  const ok=q('pass-ok'); ok.disabled=true;
+  let err;
+  try{ err=await passSubmit(pass); }
+  finally{ ok.disabled=false; }
+  if(err){ passError(err); q('pass-inp').select(); return; }
+  closePassphrase();
+}
+q('pass-ok').addEventListener('click',submitPassphrase);
+q('pass-cancel').addEventListener('click',closePassphrase);
+q('pass-overlay').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){ e.preventDefault(); submitPassphrase(); }
+  if(e.key==='Escape'){ e.preventDefault(); closePassphrase(); }
+});
+
 // ── Durability heartbeat (signature) ────────────────────────────────────────
 function hbWriting(){ HB.classList.remove('failed','pulse'); HB.classList.add('writing'); HBL.textContent='Writing…'; }
 function hbSafe(){
@@ -893,7 +1043,7 @@ function renderList(filter=''){
   q('tab-notes').setAttribute('aria-selected',S.view==='notes'?'true':'false');
   q('tab-archive').setAttribute('aria-selected',S.view==='archive'?'true':'false');
   q('mi-archive').textContent=S.view==='archive'?'Restore note':'Archive note';
-  q('mi-lock').textContent=S.activeLocked?'Unlock note':'Lock note';
+  syncLockMenu();
 
   if(!visible.length){
     const empty=S.view==='archive'?'Archive is empty.':'No notes yet.<br>Press Ctrl+N to start.';
@@ -910,7 +1060,7 @@ function renderList(filter=''){
         <div class="ni-date">${fmtDate(n.updated_at)}${n.locked?' · Locked':''}</div>
       </div>
       <div class="ni-actions">
-        <button class="ni-act${n.locked?' locked':''}" data-act="lock" data-id="${n.id}" title="${n.locked?'Unlock':'Lock'}">
+        <button class="ni-act${n.locked?' locked':''}" data-act="lock" data-id="${n.id}" title="${n.locked?'Unlock with passphrase':'Lock with a passphrase'}">
           <span class="ic" style="--i:url(assets/icons/lock.svg)"></span>
         </button>
         <button class="ni-act" data-act="archive" data-id="${n.id}" title="${S.view==='archive'?'Restore':'Archive'}">
@@ -921,7 +1071,7 @@ function renderList(filter=''){
         </button>
       </div>`;
     el.addEventListener('click',e=>{ if(!e.target.closest('.ni-actions')) openNote(n.id); });
-    el.querySelector('[data-act="lock"]').addEventListener('click',e=>{ e.stopPropagation(); toggleLock(n.id); });
+    el.querySelector('[data-act="lock"]').addEventListener('click',e=>{ e.stopPropagation(); lockAction(n.id); });
     el.querySelector('[data-act="archive"]').addEventListener('click',e=>{ e.stopPropagation(); toggleArchive(n.id); });
     el.querySelector('[data-act="delete"]').addEventListener('click',e=>{ e.stopPropagation(); confirmDelete(n.id,n.title); });
     nl.appendChild(el);
@@ -930,44 +1080,105 @@ function renderList(filter=''){
 
 // ── Open / create / delete ──────────────────────────────────────────────────
 async function openNote(id){
+  if(S.activeId!==null && S.activeId!==id) await relockActive();
   let n;
   try{ n=await App().GetNote(id); }
   catch(e){ toast('Couldn’t open note'); return; }
   S.activeId=id;
   q('note-title').value=n.title||'';
+  setLockedState(!!n.locked,false);
+  document.querySelectorAll('.ni').forEach(el=>el.classList.toggle('active',parseInt(el.dataset.id)===id));
+
+  if(n.locked){ showLockPanel(); promptReveal(id); return; }
+  await mountNote(n);
+}
+
+// mountNote puts a readable note on screen — an unlocked one, or a locked one
+// whose passphrase was just accepted.
+async function mountNote(n){
   ED.value=n.content||'';
-  setLockedState(!!n.locked);
   UndoMgr.init();
   updateLineNumbers(); updateStatus(); updateFileTag(n.file_path);
   hbSafe();
+  q('lock-state').classList.remove('show');
   ES.style.display='none';
   EP.classList.remove('show'); void EP.offsetWidth; EP.classList.add('show');
-  await loadHls(id);
+  await loadHls(n.id);
   ED.focus(); requestAnimationFrame(()=>SmoothCaret.update());
-  document.querySelectorAll('.ni').forEach(el=>el.classList.toggle('active',parseInt(el.dataset.id)===id));
 }
 
-function setLockedState(locked){
+// showLockPanel replaces the editor with the locked placeholder. Nothing about
+// the note's body is on screen or in the DOM at this point.
+function showLockPanel(){
+  ED.value='';
+  S.highlights=[]; renderHlOverlay(); renderHlPanel();
+  updateLineNumbers(); updateStatus(); updateFileTag('');
+  hbSafe();
+  ES.style.display='none';
+  EP.classList.remove('show');
+  q('lock-state').classList.add('show');
+}
+
+function promptReveal(id){
+  askPassphrase({
+    title:'Locked note',
+    msg:'Enter the passphrase to read and edit this note.',
+    okLabel:'Unlock',
+    onSubmit:async pass=>{
+      try{ await App().RevealNote(id,pass); }
+      catch(e){ return 'Wrong passphrase'; }
+      if(S.activeId!==id){ App().RelockNote(); return null; } // moved on while typing
+      let n;
+      try{ n=await App().GetNote(id); }
+      catch(e){ return 'Couldn’t open note'; }
+      setLockedState(true,true);
+      await mountNote(n);
+      return null;
+    },
+  });
+}
+
+// relockActive drops the key for the note we're leaving, so a locked note asks
+// for its passphrase again the next time it's opened.
+async function relockActive(){
+  if(S.activeRevealed){
+    try{ await App().RelockNote(); }catch(e){}
+  }
+  S.activeRevealed=false;
+}
+
+function setLockedState(locked,revealed){
   S.activeLocked=locked;
-  q('note-title').readOnly=locked;
-  ED.readOnly=locked;
-  q('note-title').classList.toggle('locked',locked);
-  ED.classList.toggle('locked',locked);
-  const mi=q('mi-lock'); if(mi) mi.textContent=locked?'Unlock note':'Lock note';
+  S.activeRevealed=revealed;
+  const readOnly=locked&&!revealed;
+  q('note-title').readOnly=readOnly;
+  ED.readOnly=readOnly;
+  q('note-title').classList.toggle('locked',readOnly);
+  ED.classList.toggle('locked',readOnly);
+  syncLockMenu();
+}
+
+function syncLockMenu(){
+  const mi=q('mi-lock'); if(!mi) return;
+  if(!S.activeLocked) mi.textContent='Lock note…';
+  else if(S.activeRevealed) mi.textContent='Remove lock';
+  else mi.textContent='Unlock note…';
 }
 
 function canEditActive(){
-  if(!S.activeLocked) return true;
+  if(!S.activeLocked || S.activeRevealed) return true;
   toast('Note is locked');
   return false;
 }
 
-function closeActiveNote(){
+async function closeActiveNote(){
+  await relockActive();
   S.activeId=null;
-  setLockedState(false);
+  setLockedState(false,false);
   q('note-title').value=''; ED.value='';
   S.highlights=[]; renderHlOverlay(); renderHlPanel();
   updateLineNumbers(); updateStatus(); updateFileTag('');
+  q('lock-state').classList.remove('show');
   EP.classList.remove('show'); ES.style.display='';
 }
 
@@ -991,7 +1202,7 @@ async function confirmDelete(id,title){
     catch(e){ toast('Delete failed'); return; }
     S.notes=S.notes.filter(n=>n.id!==id);
     if(S.activeId===id){
-      closeActiveNote();
+      await closeActiveNote();
     }
     renderList(q('search-inp').value);
     toast('Note deleted');
@@ -1016,35 +1227,60 @@ async function toggleArchive(id=S.activeId){
   const wasActive=S.activeId===id;
   renderList(q('search-inp').value);
   if(wasActive){
-    closeActiveNote();
+    await closeActiveNote();
     if(S.notes.length) await openNote(S.notes[0].id);
   }
   toast(restoring?'Note restored':'Note archived');
 }
 
-async function toggleLock(id=S.activeId){
+// lockAction is what the lock button and the File-menu entry both call. What it
+// does depends on where the note stands: unlocked → set a passphrase; locked and
+// revealed → drop the lock; locked and hidden → ask for the passphrase.
+async function lockAction(id=S.activeId){
   if(!id){ toast('No note selected'); return; }
+  const note=S.notes.find(n=>n.id===id);
+  const locked=(id===S.activeId) ? S.activeLocked : !!note?.locked;
+
+  if(!locked) return lockNote(id);
+  if(id!==S.activeId) return openNote(id);      // opening prompts for the passphrase
+  if(S.activeRevealed) return removeLock(id);
+  promptReveal(id);
+}
+
+async function lockNote(id){
   if(id===S.activeId){
     clearTimeout(S.saveTimer);
     await flushSave();
   }
-  const idx=S.notes.findIndex(n=>n.id===id);
-  const note=idx>=0 ? S.notes[idx] : null;
-  const locking=!(id===S.activeId ? S.activeLocked : !!note?.locked);
-  try{
-    if(locking) await App().LockNote(id);
-    else await App().UnlockNote(id);
-  }catch(e){
-    toast(locking?'Lock failed':'Unlock failed');
-    return;
-  }
-  if(note){
-    note.locked=locking;
-    note.updated_at=new Date().toISOString();
-  }
-  if(id===S.activeId) setLockedState(locking);
+  askPassphrase({
+    title:'Lock note',
+    msg:'Choose a passphrase. This note’s contents are encrypted with it and stay unreadable until it is entered.',
+    okLabel:'Lock note', confirm:true, warn:true,
+    onSubmit:async pass=>{
+      try{ await App().LockNote(id,pass); }
+      catch(e){ return 'Couldn’t lock this note'; }
+      const note=S.notes.find(n=>n.id===id);
+      if(note){ note.locked=true; note.content=''; note.updated_at=new Date().toISOString(); }
+      if(id===S.activeId){ setLockedState(true,false); showLockPanel(); }
+      renderList(q('search-inp').value);
+      toast('Note locked');
+      return null;
+    },
+  });
+}
+
+// removeLock decrypts the note for good. The backend only allows it while the
+// note is revealed, so this can't strip a lock without the passphrase.
+async function removeLock(id){
+  clearTimeout(S.saveTimer);
+  await flushSave();
+  try{ await App().RemoveLock(id); }
+  catch(e){ toast('Couldn’t remove the lock'); return; }
+  const note=S.notes.find(n=>n.id===id);
+  if(note){ note.locked=false; note.updated_at=new Date().toISOString(); }
+  if(id===S.activeId) setLockedState(false,false);
   renderList(q('search-inp').value);
-  toast(locking?'Note locked':'Note unlocked');
+  toast('Lock removed');
 }
 
 async function setView(view){
@@ -1052,7 +1288,7 @@ async function setView(view){
   clearTimeout(S.saveTimer);
   await flushSave();
   S.view=view;
-  closeActiveNote();
+  await closeActiveNote();
   await loadNotes();
   if(S.notes.length>0) await openNote(S.notes[0].id);
 }
@@ -1062,7 +1298,7 @@ function scheduleSave(){ clearTimeout(S.saveTimer); hbWriting(); S.saveTimer=set
 
 async function flushSave(){
   if(!S.activeId) return;
-  if(S.activeLocked){ hbSafe(); return; }
+  if(S.activeLocked && !S.activeRevealed){ hbSafe(); return; }
   const title=q('note-title').value.trim()||'Untitled';
   const content=ED.value;
   try{
@@ -1070,7 +1306,10 @@ async function flushSave(){
     hbSafe();
     const idx=S.notes.findIndex(n=>n.id===S.activeId);
     if(idx>=0){
-      S.notes[idx].title=title; S.notes[idx].content=content;
+      S.notes[idx].title=title;
+      // Never cache a locked note's plaintext in the sidebar list — it would
+      // outlive the reveal and turn up in search after the note re-locks.
+      S.notes[idx].content=S.activeLocked?'':content;
       S.notes[idx].updated_at=new Date().toISOString();
       const [n]=S.notes.splice(idx,1); S.notes.unshift(n);
     }
@@ -1361,11 +1600,12 @@ let ctxSel0 = 0, ctxSel1 = 0;
 const CTX = q('ctx-menu');
 
 function showCtxMenu(x, y, hasSel){
+  const canEdit = !S.activeLocked || S.activeRevealed;
   q('ctx-copy').disabled = !hasSel;
-  q('ctx-cut').disabled  = !hasSel || S.activeLocked;
+  q('ctx-cut').disabled  = !hasSel || !canEdit;
   const hlBtn = q('ctx-hl'), sep = q('ctx-sep-hl');
-  hlBtn.style.display = hasSel && !S.activeLocked ? '' : 'none';
-  sep.style.display   = hasSel && !S.activeLocked ? '' : 'none';
+  hlBtn.style.display = hasSel && canEdit ? '' : 'none';
+  sep.style.display   = hasSel && canEdit ? '' : 'none';
   CTX.style.left = x+'px'; CTX.style.top = y+'px';
   CTX.classList.add('show');
   requestAnimationFrame(()=>{
@@ -1468,6 +1708,7 @@ q('fi-close').addEventListener('click',closeFind);
 async function saveToFile(){
   if(!S.activeId) return;
   let path;
+  if(S.activeLocked && !S.activeRevealed){ toast('Unlock the note to export it'); return; }
   try{ path=await App().SaveToFile(S.activeId); }
   catch(e){ toast('Export failed'); return; }
   if(path){
@@ -1565,6 +1806,78 @@ q('win-max').addEventListener('click',()=>window.runtime.WindowToggleMaximise())
 q('win-close').addEventListener('click',()=>window.runtime.Quit());
 q('header').addEventListener('dblclick',e=>{ if(e.target.id==='header') window.runtime.WindowToggleMaximise(); });
 q('search-inp').addEventListener('input',e=>renderList(e.target.value));
+q('btn-reveal').addEventListener('click',()=>{ if(S.activeId) promptReveal(S.activeId); });
+
+// ── Updates ─────────────────────────────────────────────────────────────────
+// The backend polls GitHub hourly and emits 'update:available'. Everything here
+// is presentation; download, checksum verification and the binary swap are the
+// backend's job.
+const UPD={info:null, installing:false, ready:false};
+
+function showUpdatePill(info){
+  UPD.info=info;
+  q('update-pill-label').textContent=`Update ${info.version}`;
+  q('update-pill').classList.add('show');
+}
+
+function openUpdateDialog(){
+  if(!UPD.info) return;
+  const i=UPD.info;
+  q('upd-title').textContent=UPD.ready?'Update installed':'Update available';
+  q('upd-msg').textContent=UPD.ready
+    ? `GoPad ${i.version} is installed. Restart to start using it.`
+    : `GoPad ${i.version} is available — you're on ${i.current}.`;
+  const notes=q('upd-notes');
+  notes.textContent=(i.notes||'').trim()||'No release notes for this version.';
+  notes.style.display=UPD.ready?'none':'';
+  q('upd-progress').classList.remove('show');
+  q('upd-fill').style.width='0';
+  q('upd-install').disabled=false;
+  q('upd-install').textContent=UPD.ready?'Restart now':'Install & restart';
+  q('upd-later').textContent=UPD.ready?'Later':'Not now';
+  q('upd-overlay').classList.add('show');
+}
+function closeUpdateDialog(){ if(!UPD.installing) q('upd-overlay').classList.remove('show'); }
+
+async function runInstall(){
+  if(UPD.ready){ App().RestartApp().catch(()=>toast('Couldn’t restart — start GoPad again manually')); return; }
+  if(UPD.installing) return;
+  UPD.installing=true;
+  q('upd-install').disabled=true;
+  q('upd-later').disabled=true;
+  q('upd-progress').classList.add('show');
+  q('upd-pct').textContent='Downloading…';
+  try{
+    await App().DownloadAndInstall();
+  }catch(e){
+    UPD.installing=false;
+    q('upd-install').disabled=false; q('upd-later').disabled=false;
+    q('upd-progress').classList.remove('show');
+    // Most failures here are an unwritable install directory or a bad checksum;
+    // the release page is the honest fallback.
+    q('upd-pct').textContent='';
+    toast(String(e).replace(/^Error:\s*/,'')||'Update failed');
+    return;
+  }
+  UPD.installing=false;
+  UPD.ready=true;
+  q('upd-later').disabled=false;
+  openUpdateDialog();
+}
+
+// Manual check from Help → Check for updates.
+async function checkForUpdates(){
+  toast('Checking for updates…');
+  let info;
+  try{ info=await App().CheckForUpdate(); }
+  catch(e){ toast('Couldn’t reach GitHub'); return; }
+  if(info.available){ showUpdatePill(info); openUpdateDialog(); }
+  else toast(`GoPad ${info.current} is up to date`);
+}
+
+q('update-pill').addEventListener('click',openUpdateDialog);
+q('upd-later').addEventListener('click',closeUpdateDialog);
+q('upd-install').addEventListener('click',runInstall);
 
 // ── Menu bar ────────────────────────────────────────────────────────────────
 const MENU=q('menubar');
@@ -1595,7 +1908,7 @@ const MENU_ACTIONS={
   open:openFile,
   export:()=>{ clearTimeout(S.saveTimer); flushSave().then(saveToFile); },
   archive:()=>toggleArchive(),
-  lock:()=>toggleLock(),
+  lock:()=>lockAction(),
   delete:()=>{ if(!S.activeId){ toast('No note selected'); return; } const n=S.notes.find(x=>x.id===S.activeId); confirmDelete(S.activeId,n?.title); },
   undo:()=>{ if(canEditActive() && UndoMgr.undo()){ updateLineNumbers(); updateStatus(); scheduleSave(); } },
   redo:()=>{ if(canEditActive() && UndoMgr.redo()){ updateLineNumbers(); updateStatus(); scheduleSave(); } },
@@ -1604,8 +1917,13 @@ const MENU_ACTIONS={
   linenums:toggleLineNumbers,
   finc:()=>setFontSize(S.fontSize+1),
   fdec:()=>setFontSize(S.fontSize-1),
+  updates:checkForUpdates,
   shortcuts:()=>showInfo('Keyboard shortcuts',SHORTCUTS_HTML),
-  about:()=>showInfo('GoPad',ABOUT_HTML),
+  about:async()=>{
+    let v='dev';
+    try{ v=await App().Version(); }catch(e){}
+    showInfo('GoPad',`<div style="font-family:var(--font-mono);font-size:11.5px;color:var(--text-dim);margin-bottom:10px">${esc(v)}</div>`+ABOUT_HTML);
+  },
 };
 MENU.querySelectorAll('.menu-item').forEach(item=>{
   item.addEventListener('click',e=>{ e.stopPropagation(); const act=item.dataset.act; closeMenus(); MENU_ACTIONS[act]?.(); });
@@ -1632,7 +1950,7 @@ document.addEventListener('keydown',e=>{
   if(e.ctrlKey && (e.key==='='||e.key==='+')){ e.preventDefault(); setFontSize(S.fontSize+1); return; }
   if(e.ctrlKey && (e.key==='-'||e.key==='_')){ e.preventDefault(); setFontSize(S.fontSize-1); return; }
   if(e.ctrlKey && e.key==='0'){ e.preventDefault(); setFontSize(DEFAULT_FONT); return; }
-  if(e.key==='Escape'){ closeMenus(); if(FB.classList.contains('show')) closeFind(); q('modal-overlay').classList.remove('show'); }
+  if(e.key==='Escape'){ closeMenus(); if(FB.classList.contains('show')) closeFind(); q('modal-overlay').classList.remove('show'); closeUpdateDialog(); }
 });
 
 // ── Pinch-to-zoom → editor font size only ───────────────────────────────────
@@ -1669,6 +1987,14 @@ async function init(){
   ED.style.overflowX=S.wordWrap?'hidden':'auto';
   applyHlWrap();
   applyLineNums();
+
+  // Update events pushed by the backend's hourly poll.
+  window.runtime.EventsOn('update:available',info=>showUpdatePill(info));
+  window.runtime.EventsOn('update:progress',pct=>{
+    q('upd-fill').style.width=pct+'%';
+    q('upd-pct').textContent=`Downloading… ${pct}%`;
+  });
+  window.runtime.EventsOn('update:ready',()=>{ q('upd-pct').textContent='Verified and installed.'; });
 
   await loadNotes();
   if(S.notes.length>0) await openNote(S.notes[0].id);

@@ -14,6 +14,10 @@ BUILD_TAGS  := desktop,production,webkit2_41
 # `wails dev` injects desktop+dev itself, so it only needs the webkit tag.
 DEV_TAGS    := webkit2_41
 BUILD_FLAGS := CGO_ENABLED=1
+# Stamped into main.version so the in-app updater knows what it's running.
+# An untagged build reports something unparsable, which disables self-update.
+VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS     := -s -w -X main.version=$(VERSION)
 
 .PHONY: build build-windows build-linux run dev install deps clean
 
@@ -21,10 +25,10 @@ deps:
 	go mod tidy
 
 build-linux:
-	$(BUILD_FLAGS) go build -tags "$(BUILD_TAGS)" -ldflags "-s -w" -o $(BINARY) .
+	$(BUILD_FLAGS) go build -tags "$(BUILD_TAGS)" -ldflags "$(LDFLAGS)" -o $(BINARY) .
 
 build-windows:
-	wails build -platform windows/amd64 -ldflags "-s -w" -o $(BINARY).exe
+	wails build -platform windows/amd64 -ldflags "$(LDFLAGS)" -o $(BINARY).exe
 
 build: build-linux
 

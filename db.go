@@ -160,9 +160,26 @@ func dbSetArchived(db *sql.DB, id int64, archived bool) error {
 	return err
 }
 
-func dbSetLocked(db *sql.DB, id int64, locked bool) error {
+// dbSetLockedContent swaps a note's content and lock flag in one statement, so a
+// note is never briefly marked locked while its plaintext is still on disk (or
+// marked unlocked while the content is still ciphertext).
+func dbSetLockedContent(db *sql.DB, id int64, content string, locked bool) error {
 	now := time.Now().Format(time.RFC3339)
-	_, err := db.Exec(`UPDATE notes SET locked = ?, updated_at = ? WHERE id = ?`, locked, now, id)
+	_, err := db.Exec(
+		`UPDATE notes SET content = ?, locked = ?, updated_at = ? WHERE id = ?`,
+		content, locked, now, id,
+	)
+	return err
+}
+
+// dbUpdateLockedNote writes an autosave for a note that is locked and currently
+// revealed; content must already be ciphertext.
+func dbUpdateLockedNote(db *sql.DB, id int64, title, content string) error {
+	now := time.Now().Format(time.RFC3339)
+	_, err := db.Exec(
+		`UPDATE notes SET title = ?, content = ?, updated_at = ? WHERE id = ? AND locked = 1`,
+		title, content, now, id,
+	)
 	return err
 }
 
@@ -197,6 +214,14 @@ func migrateDB(db *sql.DB) error {
 		if _, err := db.Exec(`ALTER TABLE notes ADD COLUMN locked INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
+	}
+	// The first version of locking was a read-only flag with no passphrase, so
+	// those notes hold plaintext. Clear the flag rather than leave them demanding
+	// a passphrase that never existed — which no input could satisfy.
+	if _, err := db.Exec(
+		`UPDATE notes SET locked = 0 WHERE locked = 1 AND content NOT LIKE ?`, encPrefix+"%",
+	); err != nil {
+		return err
 	}
 	return nil
 }
