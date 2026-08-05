@@ -3,13 +3,24 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// lockSession is the decryption key for the one locked note currently revealed.
+// It lives only in memory and is dropped as soon as the user leaves the note, so
+// a locked note is readable exactly while it is open.
+type lockSession struct {
+	id   int64
+	key  []byte
+	salt []byte
+}
 
 // App is the Wails-bound backend. Every exported method becomes callable from
 // the frontend as window.go.main.App.<Method>(), returning a Promise that
@@ -17,6 +28,9 @@ import (
 type App struct {
 	ctx context.Context
 	db  *sql.DB
+
+	mu      sync.Mutex
+	session *lockSession
 }
 
 func NewApp() *App { return &App{} }
@@ -51,22 +65,66 @@ func getDBPath() string {
 // ── Notes ──────────────────────────────────────────────────────────────────
 
 func (a *App) ListNotes() ([]Note, error) {
-	return dbListNotes(a.db)
+	return hideLocked(dbListNotes(a.db))
 }
 
 func (a *App) ListArchivedNotes() ([]Note, error) {
-	return dbListArchivedNotes(a.db)
+	return hideLocked(dbListArchivedNotes(a.db))
 }
 
+// hideLocked strips ciphertext from list results. Locked notes still show their
+// title and dates in the sidebar; only the body is withheld, which also keeps
+// them out of content search until they are revealed.
+func hideLocked(notes []Note, err error) ([]Note, error) {
+	if err != nil {
+		return nil, err
+	}
+	for i := range notes {
+		if notes[i].Locked {
+			notes[i].Content = ""
+		}
+	}
+	return notes, nil
+}
+
+// GetNote returns plaintext for an unlocked note, or for a locked note that the
+// current session has revealed. Otherwise the body comes back empty — the
+// frontend must call RevealNote with the passphrase.
 func (a *App) GetNote(id int64) (*Note, error) {
-	return dbGetNote(a.db, id)
+	n, err := dbGetNote(a.db, id)
+	if err != nil {
+		return nil, err
+	}
+	if !n.Locked {
+		return n, nil
+	}
+	if plain, ok := a.decryptWithSession(n); ok {
+		n.Content = plain
+		return n, nil
+	}
+	n.Content = ""
+	return n, nil
 }
 
 func (a *App) CreateNote() (*Note, error) {
 	return dbCreateNote(a.db)
 }
 
+// UpdateNote autosaves. For a revealed locked note the content is re-encrypted
+// under the live session key (fresh nonce, same salt) before it touches disk;
+// for a locked note with no session the write is rejected.
 func (a *App) UpdateNote(id int64, title, content string) error {
+	a.mu.Lock()
+	s := a.session
+	a.mu.Unlock()
+
+	if s != nil && s.id == id {
+		sealed, err := sealContent(content, s.key, s.salt)
+		if err != nil {
+			return err
+		}
+		return dbUpdateLockedNote(a.db, id, title, sealed)
+	}
 	return dbUpdateNote(a.db, id, title, content)
 }
 
@@ -82,22 +140,156 @@ func (a *App) RestoreNote(id int64) error {
 	return dbSetArchived(a.db, id, false)
 }
 
-func (a *App) LockNote(id int64) error {
-	return dbSetLocked(a.db, id, true)
+// ── Locking ────────────────────────────────────────────────────────────────
+
+// LockNote encrypts the note's content with a key derived from passphrase and
+// clears the plaintext from the database. There is no recovery path: lose the
+// passphrase and the content is unreadable.
+func (a *App) LockNote(id int64, passphrase string) error {
+	if passphrase == "" {
+		return errEmptyPass
+	}
+	n, err := dbGetNote(a.db, id)
+	if err != nil {
+		return err
+	}
+	if n.Locked {
+		return errors.New("note is already locked")
+	}
+	salt, err := newSalt()
+	if err != nil {
+		return err
+	}
+	key, err := deriveKey(passphrase, salt)
+	if err != nil {
+		return err
+	}
+	sealed, err := sealContent(n.Content, key, salt)
+	if err != nil {
+		return err
+	}
+	if err := dbSetLockedContent(a.db, id, sealed, true); err != nil {
+		return err
+	}
+	a.clearSession()
+	return nil
 }
 
-func (a *App) UnlockNote(id int64) error {
-	return dbSetLocked(a.db, id, false)
+// RevealNote decrypts a locked note and keeps the key in memory so the note can
+// be read and edited. The key is dropped by RelockNote when the user navigates
+// away, so the passphrase is required again next time.
+func (a *App) RevealNote(id int64, passphrase string) (string, error) {
+	n, err := dbGetNote(a.db, id)
+	if err != nil {
+		return "", err
+	}
+	if !n.Locked {
+		return n.Content, nil
+	}
+	salt, err := saltOf(n.Content)
+	if err != nil {
+		return "", err
+	}
+	key, err := deriveKey(passphrase, salt)
+	if err != nil {
+		return "", err
+	}
+	plain, err := openContent(n.Content, key)
+	if err != nil {
+		return "", err // wrong passphrase
+	}
+	a.mu.Lock()
+	a.session = &lockSession{id: id, key: key, salt: salt}
+	a.mu.Unlock()
+	return plain, nil
+}
+
+// RelockNote forgets the in-memory key. The frontend calls it whenever the
+// revealed note stops being the active note.
+func (a *App) RelockNote() {
+	a.clearSession()
+}
+
+// RemoveLock decrypts the note permanently and clears the lock flag. It requires
+// the note to be revealed first, so it cannot be used to strip a lock without
+// the passphrase.
+func (a *App) RemoveLock(id int64) error {
+	n, err := dbGetNote(a.db, id)
+	if err != nil {
+		return err
+	}
+	if !n.Locked {
+		return nil
+	}
+	plain, ok := a.decryptWithSession(n)
+	if !ok {
+		return errNoteLocked
+	}
+	if err := dbSetLockedContent(a.db, id, plain, false); err != nil {
+		return err
+	}
+	a.clearSession()
+	return nil
+}
+
+// IsRevealed reports whether the note is currently readable in this session.
+func (a *App) IsRevealed(id int64) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.session != nil && a.session.id == id
+}
+
+func (a *App) clearSession() {
+	a.mu.Lock()
+	a.session = nil
+	a.mu.Unlock()
+}
+
+// decryptWithSession returns the note's plaintext if the live session holds its
+// key, reporting false when the note is locked and no key is held.
+func (a *App) decryptWithSession(n *Note) (string, bool) {
+	a.mu.Lock()
+	s := a.session
+	a.mu.Unlock()
+	if s == nil || s.id != n.ID {
+		return "", false
+	}
+	plain, err := openContent(n.Content, s.key)
+	if err != nil {
+		return "", false
+	}
+	return plain, true
 }
 
 // ── Highlights ─────────────────────────────────────────────────────────────
 
+// GetHighlights withholds a locked note's highlights until it is revealed —
+// their excerpts would otherwise quote the encrypted content back to the reader.
 func (a *App) GetHighlights(noteId int64) ([]Highlight, error) {
+	if locked, err := a.lockedAndHidden(noteId); err != nil {
+		return nil, err
+	} else if locked {
+		return []Highlight{}, nil
+	}
 	return dbGetHighlights(a.db, noteId)
 }
 
 func (a *App) AddHighlight(noteId int64, selText, color, comment string, offStart int64) (*Highlight, error) {
+	if locked, err := a.lockedAndHidden(noteId); err != nil {
+		return nil, err
+	} else if locked {
+		return nil, errNoteLocked
+	}
 	return dbAddHighlight(a.db, noteId, selText, color, comment, offStart)
+}
+
+// lockedAndHidden reports whether the note is locked without a live session.
+func (a *App) lockedAndHidden(id int64) (bool, error) {
+	n, err := dbGetNote(a.db, id)
+	if err != nil {
+		return false, err
+	}
+	return n.Locked && !a.IsRevealed(id), nil
 }
 
 func (a *App) DeleteHighlight(id int64) error {
@@ -122,6 +314,13 @@ func (a *App) SaveToFile(id int64) (string, error) {
 	note, err := dbGetNote(a.db, id)
 	if err != nil {
 		return "", err
+	}
+	if note.Locked {
+		plain, ok := a.decryptWithSession(note)
+		if !ok {
+			return "", errNoteLocked // never write ciphertext out to a file
+		}
+		note.Content = plain
 	}
 
 	startName := note.FilePath

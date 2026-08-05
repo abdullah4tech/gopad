@@ -57,7 +57,7 @@ func TestLockPreventsNoteUpdates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create note: %v", err)
 	}
-	if err := dbSetLocked(db, note.ID, true); err != nil {
+	if err := dbSetLockedContent(db, note.ID, "GOPADENC1:ciphertext", true); err != nil {
 		t.Fatalf("lock note: %v", err)
 	}
 	if err := dbUpdateNote(db, note.ID, "Locked title", "Locked content"); !errors.Is(err, errNoteLocked) {
@@ -71,7 +71,7 @@ func TestLockPreventsNoteUpdates(t *testing.T) {
 		t.Fatalf("locked note was updated: %#v", locked)
 	}
 
-	if err := dbSetLocked(db, note.ID, false); err != nil {
+	if err := dbSetLockedContent(db, note.ID, "", false); err != nil {
 		t.Fatalf("unlock note: %v", err)
 	}
 	if err := dbUpdateNote(db, note.ID, "Unlocked title", "Unlocked content"); err != nil {
