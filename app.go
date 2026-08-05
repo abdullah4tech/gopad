@@ -45,6 +45,8 @@ func (a *App) startup(ctx context.Context) {
 		os.Exit(1)
 	}
 	a.db = db
+	cleanupOldBinary()
+	a.watchUpdates()
 }
 
 func (a *App) shutdown(ctx context.Context) {
