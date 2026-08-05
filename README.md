@@ -53,7 +53,7 @@ The UI is HTML/CSS/JS rendered by **WebKitGTK** (the same engine behind GNOME We
 | **Durability** | Every keystroke auto-saves to SQLite within 900 ms; WAL mode + 5 s busy-timeout prevents write contention |
 | **Multi-note** | Unlimited notes; sidebar sorted by last-modified descending |
 | **Archive** | Archive notes out of the main list without deleting them; restore them from the Archive view |
-| **Locking** | Lock notes to make title, content, and highlights read-only until unlocked |
+| **Locking** | Lock a note with a passphrase — its content is encrypted at rest (scrypt + AES-256-GCM) and stays unreadable until the passphrase is entered; the key is dropped as soon as you switch notes |
 | **Search** | Live full-text sidebar search across title and content |
 | **Find & Replace** | In-editor search with match counter (`3/17`), cycle prev/next, replace one or all |
 | **File I/O** | Open any text/code file from disk; export/save back via the native Wails file dialog |
@@ -63,6 +63,7 @@ The UI is HTML/CSS/JS rendered by **WebKitGTK** (the same engine behind GNOME We
 | **Status bar** | Real-time line/column, word count, character count, linked filename |
 | **Undo/Redo** | Full undo history (Ctrl+Z) and redo (Ctrl+Shift+Z / Ctrl+Y); up to 100 states per note |
 | **Durability heartbeat** | A live `Safe` indicator in the status bar pulses on every commit to the WAL — the crash-proof promise, made visible |
+| **Auto-update** | Checks GitHub Releases hourly; an update pill in the top bar downloads the new build, verifies it against the release `SHA256SUMS`, swaps the binary in place and restarts |
 | **No Chromium** | Rendering engine is WebKitGTK; binary depends only on system GTK/WebKit libraries |
 
 ---
@@ -275,8 +276,15 @@ Each exported `App` method is bound by Wails as `window.go.main.App.<Method>()`,
 | `App.DeleteNote(id)` | `dbDeleteNote` | Hard delete |
 | `App.ArchiveNote(id)` | `dbSetArchived` | Move a note out of the main list |
 | `App.RestoreNote(id)` | `dbSetArchived` | Restore an archived note to the main list |
-| `App.LockNote(id)` | `dbSetLocked` | Make a note read-only |
-| `App.UnlockNote(id)` | `dbSetLocked` | Allow edits to a locked note |
+| `App.LockNote(id, passphrase)` | `sealContent` → `dbSetLockedContent` | Encrypt the note's content under a passphrase |
+| `App.RevealNote(id, passphrase)` | `openContent` | Decrypt and return content; holds the key for this note only |
+| `App.RelockNote()` | — | Drop the in-memory key (called when leaving the note) |
+| `App.RemoveLock(id)` | `dbSetLockedContent` | Decrypt permanently; requires the note to be revealed |
+| `App.IsRevealed(id)` | — | Whether the note is currently readable |
+| `App.CheckForUpdate()` | GitHub Releases API | Latest release + whether it's newer than this build |
+| `App.DownloadAndInstall()` | `swapBinary` | Download, verify SHA256, replace the running binary |
+| `App.RestartApp()` | `exec` + `runtime.Quit` | Relaunch into the new version |
+| `App.Version()` | — | Version stamped at build time |
 | `App.SaveToFile(id)` | Wails dialog → `os.WriteFile` | Export content to a user-chosen path |
 | `App.OpenFile()` | Wails dialog → `os.ReadFile` | Import file into a new note |
 | `App.GetSetting(key)` | `dbGetSetting` | Read one setting value |
