@@ -431,11 +431,11 @@ body.no-linenums #line-numbers{display:none}
 .btn:disabled{opacity:.5;cursor:default;pointer-events:none}
 
 /* ── Passphrase dialog ────────────────────────────────────────────────────*/
-#pass-overlay{
+#pass-overlay,#upd-overlay{
   position:fixed;inset:0;background:rgba(7,10,13,.6);backdrop-filter:blur(2px);
   display:none;align-items:center;justify-content:center;z-index:1300;
 }
-#pass-overlay.show{display:flex;animation:fadein .12s ease forwards}
+#pass-overlay.show,#upd-overlay.show{display:flex;animation:fadein .12s ease forwards}
 .pass-inp{
   width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;
   color:var(--text);font-family:var(--font-mono);font-size:13px;
@@ -460,6 +460,35 @@ body.no-linenums #line-numbers{display:none}
 #lock-state .ic{width:44px;height:44px;opacity:.45;margin-bottom:10px;background-color:var(--accent)}
 #lock-state h2{color:var(--text);font-size:16px;font-weight:600}
 #lock-state p{font-size:13px;max-width:300px;line-height:1.6}
+
+/* ── Update pill ──────────────────────────────────────────────────────────*/
+#update-pill{
+  display:none;align-items:center;gap:6px;margin-right:6px;
+  background:var(--accent-soft);color:var(--accent);border:1px solid transparent;
+  border-radius:999px;padding:4px 11px 4px 9px;cursor:pointer;
+  font-family:var(--font-ui);font-size:11.5px;font-weight:600;
+  transition:filter .13s,transform .1s;
+}
+#update-pill.show{display:flex;animation:pillin .25s ease}
+#update-pill:hover{filter:brightness(1.15)}
+#update-pill:active{transform:scale(.95)}
+@keyframes pillin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+#update-pill .dot{
+  width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;
+  animation:pilldot 2s ease-in-out infinite;
+}
+@keyframes pilldot{0%,100%{opacity:1}50%{opacity:.35}}
+#upd-notes{
+  max-height:190px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);
+  border-radius:8px;padding:11px 13px;margin-bottom:16px;
+  font-size:12px;line-height:1.65;color:var(--text-dim);white-space:pre-wrap;
+  -webkit-user-select:text;user-select:text;
+}
+#upd-progress{display:none;margin-bottom:16px}
+#upd-progress.show{display:block}
+#upd-track{height:5px;background:var(--bg);border-radius:3px;overflow:hidden}
+#upd-fill{height:100%;width:0;background:var(--accent);border-radius:3px;transition:width .18s ease}
+#upd-pct{font-size:11px;color:var(--text-dim);margin-top:7px;font-family:var(--font-mono)}
 
 @media (prefers-reduced-motion: reduce){
   *{animation:none!important;transition:none!important}
@@ -614,6 +643,7 @@ mark.hl-orange{background:rgba(255,150,50,.30)}
         <button class="menu-btn">Help</button>
         <div class="menu-pop">
           <button class="menu-item" data-act="shortcuts">Keyboard shortcuts</button>
+          <button class="menu-item" data-act="updates">Check for updates…</button>
           <button class="menu-item" data-act="about">About GoPad</button>
         </div>
       </div>
@@ -621,6 +651,9 @@ mark.hl-orange{background:rgba(255,150,50,.30)}
 
     <!-- Quick-access bar -->
     <div class="qbar" id="qbar">
+      <button id="update-pill" title="A new version of GoPad is ready to install">
+        <span class="dot"></span><span id="update-pill-label">Update available</span>
+      </button>
       <button class="theme-btn" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">
         <svg viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
           <g class="tb-halves">
@@ -794,6 +827,23 @@ mark.hl-orange{background:rgba(255,150,50,.30)}
     <div class="modal-acts">
       <button class="btn btn-ghost" id="pass-cancel">Cancel</button>
       <button class="btn btn-accent" id="pass-ok">Lock note</button>
+    </div>
+  </div>
+</div>
+
+<!-- Update dialog -->
+<div id="upd-overlay">
+  <div class="modal">
+    <h3 id="upd-title">Update available</h3>
+    <p id="upd-msg">GoPad v1.3.0 is available.</p>
+    <div id="upd-notes"></div>
+    <div id="upd-progress">
+      <div id="upd-track"><div id="upd-fill"></div></div>
+      <div id="upd-pct">Starting…</div>
+    </div>
+    <div class="modal-acts">
+      <button class="btn btn-ghost" id="upd-later">Later</button>
+      <button class="btn btn-accent" id="upd-install">Install &amp; restart</button>
     </div>
   </div>
 </div>
@@ -1758,6 +1808,77 @@ q('header').addEventListener('dblclick',e=>{ if(e.target.id==='header') window.r
 q('search-inp').addEventListener('input',e=>renderList(e.target.value));
 q('btn-reveal').addEventListener('click',()=>{ if(S.activeId) promptReveal(S.activeId); });
 
+// ── Updates ─────────────────────────────────────────────────────────────────
+// The backend polls GitHub hourly and emits 'update:available'. Everything here
+// is presentation; download, checksum verification and the binary swap are the
+// backend's job.
+const UPD={info:null, installing:false, ready:false};
+
+function showUpdatePill(info){
+  UPD.info=info;
+  q('update-pill-label').textContent=`Update ${info.version}`;
+  q('update-pill').classList.add('show');
+}
+
+function openUpdateDialog(){
+  if(!UPD.info) return;
+  const i=UPD.info;
+  q('upd-title').textContent=UPD.ready?'Update installed':'Update available';
+  q('upd-msg').textContent=UPD.ready
+    ? `GoPad ${i.version} is installed. Restart to start using it.`
+    : `GoPad ${i.version} is available — you're on ${i.current}.`;
+  const notes=q('upd-notes');
+  notes.textContent=(i.notes||'').trim()||'No release notes for this version.';
+  notes.style.display=UPD.ready?'none':'';
+  q('upd-progress').classList.remove('show');
+  q('upd-fill').style.width='0';
+  q('upd-install').disabled=false;
+  q('upd-install').textContent=UPD.ready?'Restart now':'Install & restart';
+  q('upd-later').textContent=UPD.ready?'Later':'Not now';
+  q('upd-overlay').classList.add('show');
+}
+function closeUpdateDialog(){ if(!UPD.installing) q('upd-overlay').classList.remove('show'); }
+
+async function runInstall(){
+  if(UPD.ready){ App().RestartApp().catch(()=>toast('Couldn’t restart — start GoPad again manually')); return; }
+  if(UPD.installing) return;
+  UPD.installing=true;
+  q('upd-install').disabled=true;
+  q('upd-later').disabled=true;
+  q('upd-progress').classList.add('show');
+  q('upd-pct').textContent='Downloading…';
+  try{
+    await App().DownloadAndInstall();
+  }catch(e){
+    UPD.installing=false;
+    q('upd-install').disabled=false; q('upd-later').disabled=false;
+    q('upd-progress').classList.remove('show');
+    // Most failures here are an unwritable install directory or a bad checksum;
+    // the release page is the honest fallback.
+    q('upd-pct').textContent='';
+    toast(String(e).replace(/^Error:\s*/,'')||'Update failed');
+    return;
+  }
+  UPD.installing=false;
+  UPD.ready=true;
+  q('upd-later').disabled=false;
+  openUpdateDialog();
+}
+
+// Manual check from Help → Check for updates.
+async function checkForUpdates(){
+  toast('Checking for updates…');
+  let info;
+  try{ info=await App().CheckForUpdate(); }
+  catch(e){ toast('Couldn’t reach GitHub'); return; }
+  if(info.available){ showUpdatePill(info); openUpdateDialog(); }
+  else toast(`GoPad ${info.current} is up to date`);
+}
+
+q('update-pill').addEventListener('click',openUpdateDialog);
+q('upd-later').addEventListener('click',closeUpdateDialog);
+q('upd-install').addEventListener('click',runInstall);
+
 // ── Menu bar ────────────────────────────────────────────────────────────────
 const MENU=q('menubar');
 function closeMenus(){ MENU.querySelectorAll('.menu.open').forEach(m=>m.classList.remove('open')); }
@@ -1796,8 +1917,13 @@ const MENU_ACTIONS={
   linenums:toggleLineNumbers,
   finc:()=>setFontSize(S.fontSize+1),
   fdec:()=>setFontSize(S.fontSize-1),
+  updates:checkForUpdates,
   shortcuts:()=>showInfo('Keyboard shortcuts',SHORTCUTS_HTML),
-  about:()=>showInfo('GoPad',ABOUT_HTML),
+  about:async()=>{
+    let v='dev';
+    try{ v=await App().Version(); }catch(e){}
+    showInfo('GoPad',`<div style="font-family:var(--font-mono);font-size:11.5px;color:var(--text-dim);margin-bottom:10px">${esc(v)}</div>`+ABOUT_HTML);
+  },
 };
 MENU.querySelectorAll('.menu-item').forEach(item=>{
   item.addEventListener('click',e=>{ e.stopPropagation(); const act=item.dataset.act; closeMenus(); MENU_ACTIONS[act]?.(); });
@@ -1824,7 +1950,7 @@ document.addEventListener('keydown',e=>{
   if(e.ctrlKey && (e.key==='='||e.key==='+')){ e.preventDefault(); setFontSize(S.fontSize+1); return; }
   if(e.ctrlKey && (e.key==='-'||e.key==='_')){ e.preventDefault(); setFontSize(S.fontSize-1); return; }
   if(e.ctrlKey && e.key==='0'){ e.preventDefault(); setFontSize(DEFAULT_FONT); return; }
-  if(e.key==='Escape'){ closeMenus(); if(FB.classList.contains('show')) closeFind(); q('modal-overlay').classList.remove('show'); }
+  if(e.key==='Escape'){ closeMenus(); if(FB.classList.contains('show')) closeFind(); q('modal-overlay').classList.remove('show'); closeUpdateDialog(); }
 });
 
 // ── Pinch-to-zoom → editor font size only ───────────────────────────────────
@@ -1861,6 +1987,14 @@ async function init(){
   ED.style.overflowX=S.wordWrap?'hidden':'auto';
   applyHlWrap();
   applyLineNums();
+
+  // Update events pushed by the backend's hourly poll.
+  window.runtime.EventsOn('update:available',info=>showUpdatePill(info));
+  window.runtime.EventsOn('update:progress',pct=>{
+    q('upd-fill').style.width=pct+'%';
+    q('upd-pct').textContent=`Downloading… ${pct}%`;
+  });
+  window.runtime.EventsOn('update:ready',()=>{ q('upd-pct').textContent='Verified and installed.'; });
 
   await loadNotes();
   if(S.notes.length>0) await openNote(S.notes[0].id);
