@@ -173,7 +173,7 @@ func (a *App) LockNote(id int64, passphrase string) error {
 	if err := dbSetLockedContent(a.db, id, sealed, true); err != nil {
 		return err
 	}
-	a.clearSession()
+	a.clearSessionFor(id)
 	return nil
 }
 
@@ -230,7 +230,7 @@ func (a *App) RemoveLock(id int64) error {
 	if err := dbSetLockedContent(a.db, id, plain, false); err != nil {
 		return err
 	}
-	a.clearSession()
+	a.clearSessionFor(id)
 	return nil
 }
 
@@ -244,6 +244,17 @@ func (a *App) IsRevealed(id int64) bool {
 func (a *App) clearSession() {
 	a.mu.Lock()
 	a.session = nil
+	a.mu.Unlock()
+}
+
+// clearSessionFor drops the key only if it belongs to this note. Locking or
+// unlocking one note must not revoke the reveal on a different one that is open
+// and being edited.
+func (a *App) clearSessionFor(id int64) {
+	a.mu.Lock()
+	if a.session != nil && a.session.id == id {
+		a.session = nil
+	}
 	a.mu.Unlock()
 }
 

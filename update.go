@@ -103,8 +103,11 @@ func (a *App) watchUpdates() {
 		wails.EventsEmit(a.ctx, "update:available", info)
 	}
 
-	time.AfterFunc(firstCheck, check)
+	// One goroutine owns `notified`; a separate first-check timer would race
+	// with the ticker for it.
 	go func() {
+		time.Sleep(firstCheck)
+		check()
 		t := time.NewTicker(checkInterval)
 		defer t.Stop()
 		for range t.C {

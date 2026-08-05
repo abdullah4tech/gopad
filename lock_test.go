@@ -228,6 +228,29 @@ func TestSealUsesAFreshNonceEachTime(t *testing.T) {
 	}
 }
 
+func TestLockingOneNoteKeepsAnotherRevealed(t *testing.T) {
+	a := newTestApp(t)
+	secret := lockedNote(t, a, "launch codes", "hunter2")
+	other, err := a.CreateNote()
+	if err != nil {
+		t.Fatalf("create second note: %v", err)
+	}
+
+	if _, err := a.RevealNote(secret, "hunter2"); err != nil {
+		t.Fatalf("reveal: %v", err)
+	}
+	// Locking a different note must not revoke the open note's reveal.
+	if err := a.LockNote(other.ID, "other-pass"); err != nil {
+		t.Fatalf("lock second note: %v", err)
+	}
+	if !a.IsRevealed(secret) {
+		t.Fatal("locking another note dropped the open note's key")
+	}
+	if err := a.UpdateNote(secret, "Secret", "still editing"); err != nil {
+		t.Fatalf("autosave after locking another note: %v", err)
+	}
+}
+
 func TestLegacyFlagLockIsCleared(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "notes.db")
 	db, err := initDB(path)
