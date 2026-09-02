@@ -79,12 +79,13 @@ The UI is HTML/CSS/JS rendered by **WebKitGTK** (the same engine behind GNOME We
 
 ### Build
 
-| Tool | Arch | Purpose |
-|---|---|---|
-| `gcc` | `sudo pacman -S gcc` | CGO compilation |
-| `pkg-config` | `sudo pacman -S pkgconf` | Library flag resolution |
-| Go ≥ 1.21 | [go.dev/dl](https://go.dev/dl/) | Compiler |
-| Wails CLI *(optional)* | `go install github.com/wailsapp/wails/v2/cmd/wails@latest` | Only for `make dev` live-reload |
+| Tool | Platform | Installation | Purpose |
+|---|---|---|---|
+| `gcc` | Arch | `sudo pacman -S gcc` | CGO compilation |
+| `pkg-config` | Arch | `sudo pacman -S pkgconf` | Library flag resolution |
+| MinGW-w64 GCC | Windows | `winget install --id BrechtSanders.WinLibs.POSIX.UCRT -e` | CGO compilation for SQLite |
+| Go ≥ 1.21 | All | [go.dev/dl](https://go.dev/dl/) | Compiler |
+| Wails CLI *(optional)* | All | `go install github.com/wailsapp/wails/v2/cmd/wails@latest` | Only for `make dev` live-reload |
 
 > **Note** — a plain `make build` does **not** need the Wails CLI. The frontend ships as static
 > files under `frontend/dist/` and is embedded with `//go:embed`, so `go build` is enough.
@@ -117,6 +118,17 @@ make deps && make install
 
 The `install` target copies the binary to `~/.local/bin/gopad`. Make sure that directory is in your `$PATH`.
 
+### Windows
+
+Open PowerShell in the repository after installing Go and MinGW-w64 GCC, then run:
+
+```powershell
+.\build-windows.ps1
+.\gopad.exe
+```
+
+The build script enables CGO for the SQLite driver, embeds the prebuilt frontend, stamps the current Git version, and creates a GUI executable without a console window. The Wails CLI is not required.
+
 ---
 
 ## Building Manually
@@ -125,6 +137,13 @@ If you prefer not to use Make:
 
 ```bash
 CGO_ENABLED=1 go build -tags webkit2_41 -o gopad .
+```
+
+On Windows, the equivalent manual command is:
+
+```powershell
+$env:CGO_ENABLED = "1"
+go build -tags "desktop,production" -ldflags "-H windowsgui" -o gopad.exe .
 ```
 
 > **Why the `webkit2_41` build tag?**
@@ -312,6 +331,8 @@ You are on a distro that ships `webkit2gtk-4.1` (Arch, Fedora 37+, Ubuntu 22.10+
 **App fails to start with `failed to open database`**
 
 GoPad cannot create `~/.local/share/gopad/`. Check that your home directory is writable. As a fallback it will attempt to write `notes.db` in the current working directory.
+
+On Windows, also confirm that the executable was built with `CGO_ENABLED=1` and MinGW-w64 GCC available. The `go-sqlite3` driver cannot open the database in a CGO-disabled build.
 
 **Notes from a previous session are missing**
 
