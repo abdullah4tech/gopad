@@ -1,3 +1,6 @@
 gopad
+gopad.exe
+.gocache/
+.gomodcache/
 # Scraped content from web tools
 .firecrawl/
